@@ -92,6 +92,9 @@ public final class CircleViewModel {
         let original = snapshot.posts[i]
         pendingIDs.insert(post.id); mutationRevision += 1
         snapshot.posts[i].comments.append(text); feedback += 1
+        if let author = snapshot.friends.first(where: { $0.id == currentUserID }), snapshot.posts[i].commentDetails != nil {
+            snapshot.posts[i].commentDetails?.append(PostComment(author: author, text: text))
+        }
         defer { if attempt == generation { pendingIDs.remove(post.id); mutationRevision += 1 } }
         do {
             let updated = try await repository.addComment(postID: post.id, text: text)

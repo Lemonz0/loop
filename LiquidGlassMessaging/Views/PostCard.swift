@@ -54,7 +54,7 @@ struct PostCard: View {
                 Button("Delete post", role: .destructive) { Task { await model.delete(post) } }
                 Button("Cancel", role: .cancel) {}
             }
-            .sheet(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model) }
+            .fullScreenCover(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model) }
             .sheet(isPresented: $showEdit) { EditPostView(post: post, model: model) }
             .sheet(isPresented: $showLikes) { PostLikesView(postID: post.id, model: model) }
     }
@@ -78,8 +78,10 @@ private struct PostHeader: View {
         }
     }
 }
-private struct PostPhotos: View {
+struct PostPhotos: View {
     let post: Post
+    var height: CGFloat = 290
+    var radius: CGFloat = 20
     var body: some View {
         Group {
             if post.media.count > 1 {
@@ -87,53 +89,8 @@ private struct PostPhotos: View {
                     ForEach(Array(post.media.enumerated()), id: \.offset) { _, media in CircleMediaView(media: media) }
                 }.tabViewStyle(.page(indexDisplayMode: .always))
             } else if let media = post.media.first { CircleMediaView(media: media) }
-        }.frame(height: 290).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }.frame(height: height).clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .accessibilityLabel("Photo by \(post.author.name)")
-    }
-}
-struct PostDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-    let postID: UUID
-    @Bindable var model: CircleViewModel
-    @State private var text = ""
-    private var post: Post? { model.snapshot.posts.first { $0.id == postID } }
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                AmbientGlowBackground()
-                ScrollView {
-                    GlassEffectContainer(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            if let post {
-                                PostHeader(post: post, fullDate: true)
-                                PostPhotos(post: post)
-                                Text(post.caption).font(.body)
-                                Text("Comments").font(.headline)
-                                if post.comments.isEmpty { Text("No comments yet").font(.subheadline) }
-                                ForEach(Array(post.comments.enumerated()), id: \.offset) { _, comment in
-                                    Text(comment).frame(maxWidth: .infinity, alignment: .leading).padding().circleSurface(radius: 20)
-                                }
-                            } else { ContentUnavailableView("Post unavailable", systemImage: "photo") }
-                        }.padding(20)
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                if let post {
-                    HStack {
-                        TextField("Add a comment", text: $text, axis: .vertical).lineLimit(1...4)
-                        Button("Send") {
-                            let submitted = text
-                            text = ""
-                            Task { if !(await model.comment(post, text: submitted)), text.isEmpty { text = submitted } }
-                        }.buttonStyle(.glassProminent)
-                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isPending(postID))
-                    }.padding(16).circleSurface(radius: 24).padding(.horizontal, 16).padding(.bottom, 8)
-                }
-            }
-            .navigationTitle("Post").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
-        }
     }
 }
 private struct EditPostView: View {
@@ -154,7 +111,7 @@ private struct EditPostView: View {
         }
     }
 }
-private struct PostLikesView: View {
+struct PostLikesView: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
     let postID: UUID

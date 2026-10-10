@@ -15,6 +15,11 @@ public struct CircleMedia: Codable, Hashable, Sendable {
     }
 }
 
+public struct PostComment: Codable, Hashable, Sendable {
+    public var author: User
+    public var text: String
+}
+
 public struct Post: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var author: User
@@ -24,6 +29,7 @@ public struct Post: Identifiable, Codable, Hashable, Sendable {
     public var likes: Int
     public var comments: [String]
     public var isLiked: Bool
+    public var commentDetails: [PostComment]? = nil
 }
 
 public struct Story: Identifiable, Codable, Hashable, Sendable {

@@ -44,6 +44,12 @@ test('social posts persist, never leak across circles, and have account-owned re
   await app.call(prefix + `/posts/${post.data.id}/comments`, { text: 'Hi' }, app.friend);
   const restarted = new SocialStore(app.auth, app.directory, path.join(app.directory, 'uploads'));
   assert.deepEqual(restarted.snapshot(app.friend.user.id, 'circle_main').posts[0].comments, ['Hi']);
+  const detail = restarted.snapshot(app.friend.user.id, 'circle_main').posts[0].commentDetails[0];
+  assert.equal(detail.author.id, app.friend.user.id);
+  assert.equal(detail.author.name, app.auth.socialUser(app.friend.user.id).name);
+  assert.equal(detail.text, 'Hi');
+  assert.equal(detail.author.passwordHash, undefined);
+  assert.equal(detail.author.token, undefined);
   const other = app.auth.createCircle(app.owner.user.id, 'Private');
   assert.equal((await app.call(`/api/circles/${other.id}/social`, undefined, app.friend)).status, 404);
   assert.equal((await app.call(prefix + '/posts', { imageURL }, app.friend)).status, 403);

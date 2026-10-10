@@ -40,6 +40,9 @@ public actor MockFeedRepository: FeedRepository {
     public func addComment(postID: UUID, text: String) throws -> Post {
         guard let i = snapshot.posts.firstIndex(where: { $0.id == postID }) else { throw CircleRepositoryError.notFound }
         snapshot.posts[i].comments.append(text)
+        if let author = snapshot.friends.first(where: { $0.id == "me" }), snapshot.posts[i].commentDetails != nil {
+            snapshot.posts[i].commentDetails?.append(PostComment(author: author, text: text))
+        }
         return snapshot.posts[i]
     }
     public func editPost(id: UUID, caption: String) throws -> Post {

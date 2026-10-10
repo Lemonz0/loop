@@ -8,11 +8,16 @@ public enum MockData {
                      User(id: "ioana", name: "Ioana", allowsTrollPosts: true),
                      User(id: "alex", name: "Alex", allowsTrollPosts: false)]
         let media = [1018, 1015, 1025, 1003].map { CircleMedia(url: URL(string: "https://picsum.photos/id/\($0)/900/1200")) }
-        let posts = [Post(id: UUID(), author: users[1], media: [media[0], media[1]],
+        var posts = [Post(id: UUID(), author: users[1], media: [media[0], media[1]],
                           caption: "Sunset at the lake, you all missed out.", createdAt: now.addingTimeInterval(-7200),
                           likes: 12, comments: ["Next time, invite us!", "That light.", "Our spot.", "See you tomorrow."], isLiked: false),
                      Post(id: UUID(), author: users[2], media: [media[1]], caption: "A little escape with the circle.",
                           createdAt: now.addingTimeInterval(-18000), likes: 7, comments: [], isLiked: false)]
+        for i in posts.indices {
+            posts[i].commentDetails = posts[i].comments.enumerated().map { index, text in
+                PostComment(author: users[(index + 2) % users.count], text: text)
+            }
+        }
         let stories = (1...4).map { i in
             Story(id: UUID(), user: users[i], media: media[i-1], caption: i == 1 ? posts[0].caption : "A moment from today.",
                   createdAt: now.addingTimeInterval(-Double([3, 9, 21, 23][i-1]) * 3600),

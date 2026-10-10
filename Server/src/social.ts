@@ -35,7 +35,7 @@ export class SocialStore {
   private visible(post: TrollRecord, userId: string) {
     return !post.removed && !post.hiddenFor.includes(userId) && Object.entries(post.subjects).every(([id, version]) => this.auth.socialUser(id).allowsTrollPosts && this.auth.consentVersion(id) === version);
   }
-  private postDTO(post: PostRecord, userId: string) { return { id: post.id, author: this.auth.socialUser(post.authorId), media: [{ url: post.imageURL }], caption: post.caption, createdAt: post.createdAt, likes: post.likes.length, comments: post.comments.map(c => c.text), isLiked: post.likes.includes(userId) }; }
+  private postDTO(post: PostRecord, userId: string) { return { id: post.id, author: this.auth.socialUser(post.authorId), media: [{ url: post.imageURL }], caption: post.caption, createdAt: post.createdAt, likes: post.likes.length, comments: post.comments.map(c => c.text), commentDetails: post.comments.map(c => ({ author: this.auth.socialUser(c.userId), text: c.text })), isLiked: post.likes.includes(userId) }; }
   private storyDTO(story: StoryRecord, userId: string) { return { id: story.id, user: this.auth.socialUser(story.authorId), media: { url: story.imageURL }, caption: story.caption, createdAt: story.createdAt, expiresAt: story.expiresAt, isSeen: story.seen.includes(userId), isLiked: story.likes.includes(userId) }; }
   private trollDTO(post: TrollRecord, userId: string) { return { id: post.id, imageURL: post.imageURL, caption: post.caption, createdAt: post.createdAt, reactions: post.reactions.length, hasReacted: post.reactions.includes(userId), aspectRatio: post.aspectRatio }; }
   snapshot(userId: string, circleId: string) {
