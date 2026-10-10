@@ -41,16 +41,30 @@ struct ConversationDockMeasurement: UIViewControllerRepresentable {
             guard let tabs = tabBarController, !tabs.isTabBarHidden else { return }
             let bar = tabs.tabBar
             guard !bar.isHidden, bar.bounds.height > 0, let window = bar.window else { return }
-            // The floating bar's bounds already describe its full height. Subtracting
-            // its safe area makes the replacement composer visibly shorter.
-            let height = max(44, bar.bounds.height)
-            let frame = bar.convert(bar.bounds, to: window)
+            // Prefer the native glass surface: the enclosing UIKit bar can also
+            // include space around the floating capsule and the home indicator.
+            let surface = glassSurface(in: bar, minimumWidth: bar.bounds.width / 2) ?? bar
+            let height = max(44, surface.bounds.height)
+            let frame = surface.convert(surface.bounds, to: window)
             let bottomOffset = frame.maxY - window.safeAreaLayoutGuide.layoutFrame.maxY
             guard abs(metrics.height - height) > 0.5 || abs(metrics.bottomOffset - bottomOffset) > 0.5 else { return }
             Task { @MainActor [weak self] in
                 self?.metrics.height = height
                 self?.metrics.bottomOffset = bottomOffset
             }
+        }
+        private func glassSurface(in view: UIView, minimumWidth: CGFloat) -> UIView? {
+            if let effectView = view as? UIVisualEffectView,
+               effectView.effect is UIGlassEffect,
+               effectView.bounds.width >= minimumWidth,
+               effectView.bounds.height >= 44,
+               !effectView.isHidden {
+                return effectView
+            }
+            for child in view.subviews where !child.isHidden {
+                if let surface = glassSurface(in: child, minimumWidth: minimumWidth) { return surface }
+            }
+            return nil
         }
     }
 }
