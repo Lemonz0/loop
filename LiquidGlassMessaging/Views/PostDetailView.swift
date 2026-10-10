@@ -160,6 +160,7 @@ struct PostDetailView: View {
                         .frame(width: 34, height: 28)
                 }.buttonStyle(.glassProminent).buttonBorderShape(.capsule)
                     .controlSize(.small).frame(width: 50, height: 44).contentShape(Rectangle())
+                    .offset(x: -3)
                     .accessibilityLabel("Send comment")
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 2000 || model.isPending(postID))
             }.padding(.horizontal, 6).padding(.vertical, 3).glassEffect(.regular.interactive(), in: Capsule())
