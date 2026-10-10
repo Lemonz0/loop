@@ -64,6 +64,8 @@ public enum MessageDeliveryStatus: String, Codable, Sendable {
     case failed
 }
 
+public struct MessageReaction: Codable, Sendable, Hashable { public let userId: String; public let emoji: String }
+
 public struct ChatMessage: Identifiable, Codable, Sendable, Hashable {
     public let id: String
     public let roomId: String
@@ -75,8 +77,10 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Hashable {
     public let timestamp: Date
     public var status: MessageDeliveryStatus
     public var isFromCurrentUser: Bool
+    public var replyToId: String?
+    public var reactions: [MessageReaction]?
     private enum CodingKeys: String, CodingKey {
-        case id, roomId, senderId, senderName, senderAvatarURL, content, mediaAttachment, timestamp, status, isFromCurrentUser
+        case id, roomId, senderId, senderName, senderAvatarURL, content, mediaAttachment, timestamp, status, isFromCurrentUser, replyToId, reactions
     }
     public init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
@@ -90,6 +94,8 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Hashable {
         timestamp = try fields.decode(Date.self, forKey: .timestamp)
         status = try fields.decode(MessageDeliveryStatus.self, forKey: .status)
         isFromCurrentUser = try fields.decodeIfPresent(Bool.self, forKey: .isFromCurrentUser) ?? false
+        replyToId = try fields.decodeIfPresent(String.self, forKey: .replyToId)
+        reactions = try fields.decodeIfPresent([MessageReaction].self, forKey: .reactions)
     }
 
     

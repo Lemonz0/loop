@@ -58,12 +58,12 @@ public struct HomeView: View {
             .onDisappear { closeSearch() }
             .task { await model.refresh() }
             .onChange(of: AppEnvironment.shared.chatStore.accountRevision) { _, _ in Task { await model.refresh() } }
-            .sheet(item: $controls) { mode in SocialControlsView(mode: mode, circleID: model.currentCircleID ?? "", onChange: { Task { await model.refresh() } }) }
+            .sheet(item: $controls) { mode in SocialControlsView(mode: mode, circleID: model.currentCircleID ?? "", onChange: { Task { await model.refresh() } }).profilePresentationHost() }
             .sheet(item: $composer) { CircleComposer(kind: $0, model: model) }
             .fullScreenCover(item: $selectedStory) { story in
                 StoryViewer(stories: model.activeStories(at: .now), startingAt: story.id, repository: model.repository) {
                     Task { await model.refresh() }
-                }
+                }.profilePresentationHost()
             }
         }
     }

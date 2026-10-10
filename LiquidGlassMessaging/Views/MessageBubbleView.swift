@@ -5,6 +5,7 @@ public struct MessageBubbleView: View {
     @Environment(\.appTheme) private var theme
     public let message: ChatMessage
     public let isGroup: Bool
+    @State private var showsReactions = false
     @State private var store = AppEnvironment.shared.chatStore
 
     public init(message: ChatMessage, isGroup: Bool = false) {
@@ -29,10 +30,17 @@ public struct MessageBubbleView: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(theme.accent)
                         .padding(.leading, 4)
+                        .profileEntry(message.senderId, name: message.senderName)
                 }
 
                 // Bubble Container
                 VStack(alignment: message.isFromCurrentUser ? .trailing : .leading, spacing: 6) {
+                    if let replyID = message.replyToId, let original = store.messagesByRoomId[message.roomId]?.first(where: { $0.id == replyID }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(original.senderName).font(.caption.bold()).profileEntry(original.senderId, name: original.senderName, source: "reply")
+                            Text(original.content.isEmpty ? "Attachment" : original.content).font(.caption).lineLimit(2).foregroundStyle(theme.secondaryText)
+                        }.padding(10).circleSurface(radius: 14)
+                    }
                     // Inline Media Card (if attached)
                     if let attachment = message.mediaAttachment {
                         InlineMediaView(attachment: attachment)
@@ -40,7 +48,7 @@ public struct MessageBubbleView: View {
 
                     // Message Text
                     if !message.content.isEmpty {
-                        Text(message.content)
+                        ProfileMentionText(text: message.content, users: Array(store.memberProfiles.values))
                             .font(.system(size: 15, weight: .regular))
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
@@ -62,6 +70,14 @@ public struct MessageBubbleView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .liquidGlassBubble(isFromCurrentUser: message.isFromCurrentUser)
+                .contextMenu {
+                    Button("Reply", systemImage: "arrowshape.turn.up.left") { store.replyDraft = message }
+                    ForEach(["❤️", "👍", "😂", "😮", "😢"], id: \.self) { emoji in Button(emoji) { react(emoji) } }
+                    Button("Who reacted", systemImage: "face.smiling") { showsReactions = true }
+                }
+                if let reactions = message.reactions, !reactions.isEmpty {
+                    Button { showsReactions = true } label: { Text(reactions.map(\.emoji).joined() + " \(reactions.count)").font(.caption).frame(minHeight: 44) }.buttonStyle(.glass)
+                }
             }
 
             if !message.isFromCurrentUser {
@@ -70,8 +86,14 @@ public struct MessageBubbleView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 2)
+        .sheet(isPresented: $showsReactions) { MessageReactionsView(message: message) }
     }
 
+    private func react(_ emoji: String) {
+        struct Body: Encodable { let emoji: String }
+        struct Result: Decodable, Sendable { let success: Bool }
+        Task { do { let _: Result = try await ProfileRepository.shared.request("api/chats/\(message.roomId)/messages/\(message.id)/reaction", body: JSONEncoder().encode(Body(emoji: emoji))) } catch { AuthSessionManager.shared.lastError = error.localizedDescription } }
+    }
     // MARK: - Status Indicators
 
     @ViewBuilder

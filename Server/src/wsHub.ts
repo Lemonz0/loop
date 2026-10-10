@@ -4,7 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ClientMessageEnvelope, ServerMessageEnvelope, UserProfile, ChatMessage, CallSignalPayload, RoomTheme } from './types.js';
 import { randomUUID } from 'node:crypto';
-import { AuthStore } from './auth.js';
+import { ProfileStore } from './profiles.js';
+import { ApiError, AuthStore } from './auth.js';
 import { serverLogger } from './logger.js';
 
 interface ConnectedClient {
@@ -18,14 +19,18 @@ interface ConnectedClient {
 export class WebSocketHub {
   private clients = new Map<WebSocket, ConnectedClient>();
   private messageHistory = new Map<string, ChatMessage[]>();
+  private calls: { id: string; roomId: string; callerId: string; date: string; isVideo: boolean; participantIds: string[] }[] = [];
+  private lastSeen = new Map<string, string>();
   private roomThemes = new Map<string, RoomTheme>();
 
   private dataDir = path.resolve(process.cwd(), 'data');
   private messagesFilePath = path.join(this.dataDir, 'messages.json');
   private themesFilePath = path.join(this.dataDir, 'themes.json');
 
-  constructor(private wss: WebSocketServer, private auth: AuthStore, dataDirectory?: string) {
+  constructor(private wss: WebSocketServer, private auth: AuthStore, dataDirectory?: string, private profiles?: ProfileStore) {
     if (dataDirectory) { this.dataDir = dataDirectory; this.messagesFilePath = path.join(dataDirectory, 'messages.json'); this.themesFilePath = path.join(dataDirectory, 'themes.json'); }
+    const callsFile = path.join(this.dataDir, 'calls.json');
+    if (fs.existsSync(callsFile)) this.calls = JSON.parse(fs.readFileSync(callsFile, 'utf8'));
     this.loadPersistedData();
     this.setupServer();
   }
@@ -84,10 +89,11 @@ export class WebSocketHub {
     for (const client of this.clients.values()) {
       if (!this.active(client)) continue;
       let changed = false;
+      for (const roomId of client.joinedRooms) if (!this.auth.canAccessRoom(client.user.id, roomId)) { client.joinedRooms.delete(roomId); changed = true; }
       for (const roomId of this.auth.roomsFor(client.user.id)) {
         if (client.joinedRooms.has(roomId)) continue;
         changed = true; client.joinedRooms.add(roomId);
-        this.send(client.ws, { type: 'room_history', roomId, history: this.messageHistory.get(roomId) ?? [] });
+        this.send(client.ws, { type: 'room_history', roomId, history: this.visibleHistory(client.user.id, roomId) });
       }
       if (changed) this.send(client.ws, { type: 'account_updated' });
     }
@@ -97,6 +103,49 @@ export class WebSocketHub {
     for (const client of this.clients.values()) if (this.auth.shareCircle(userId, client.user.id) && this.active(client)) this.send(client.ws, { type: 'account_updated' });
   }
 
+  private canInteract(viewer: string, roomId: string) {
+    if (!this.auth.canWriteRoom(viewer, roomId)) return false;
+    const room = this.auth.chatRooms(viewer).find(r => r.id === roomId);
+    return !!room && (room.isGroup || room.participantIds.filter(id => id !== viewer).every(id => this.profiles?.canContact(viewer, id) ?? true));
+  }
+  private visibleHistory(viewer: string, roomId: string) {
+    const room = this.auth.chatRooms(viewer).find(r => r.id === roomId); if (!room) return [];
+    const peer = !room.isGroup ? room.participantIds.find(id => id !== viewer) : undefined;
+    const personal = peer ? this.profiles?.personal(viewer, peer) : undefined;
+    const durations = [personal?.disappearingSeconds ?? 0, peer ? this.profiles?.personal(peer, viewer).disappearingSeconds ?? 0 : 0].filter(n => n > 0);
+    const duration = durations.length ? Math.min(...durations) : 0;
+    return (this.messageHistory.get(roomId) ?? []).filter(m => (!personal?.clearBefore || m.timestamp > personal.clearBefore) && (!duration || Date.parse(m.timestamp) + duration * 1000 > Date.now()));
+  }
+  sharedItems(viewer: string, target: string, roomId?: string) {
+    const room = this.auth.chatRooms(viewer).find(r => roomId ? r.id === roomId && r.participantIds.includes(target) : !r.isGroup && r.participantIds.includes(target));
+    if (!room) return [];
+    return this.visibleHistory(viewer, room.id).filter(m => m.mediaAttachment || /https:\/\//.test(m.content)).slice(-200).reverse();
+  }
+  canReadChatMedia(viewer: string, filename: string) {
+    let referenced = false;
+    for (const [roomId, messages] of this.messageHistory) {
+      if (!messages.some(m => m.mediaAttachment?.remoteURL === '/uploads/' + filename)) continue;
+      referenced = true;
+      if (this.auth.canAccessRoom(viewer, roomId) && this.visibleHistory(viewer, roomId).some(m => m.mediaAttachment?.remoteURL === '/uploads/' + filename)) return true;
+    }
+    return !referenced;
+  }
+  refreshHistories(viewer: string) { for (const client of this.clients.values()) if (this.active(client) && client.user.id === viewer) for (const roomId of client.joinedRooms) this.send(client.ws, { type: 'room_history', roomId, history: this.visibleHistory(viewer, roomId) }); }
+  refreshPresence() {
+    for (const viewer of this.clients.values()) if (this.active(viewer)) for (const target of this.clients.values()) {
+      if (!this.auth.shareCircle(viewer.user.id, target.user.id)) continue;
+      this.send(viewer.ws, { type: 'presence_updated', presence: { userId: target.user.id, displayName: target.user.displayName, isOnline: this.profiles?.canSeePresence(viewer.user.id, target.user.id) ?? true, lastSeen: new Date(0).toISOString() } });
+    }
+  }
+  presenceFor(userId: string) { return { userId, displayName: this.auth.socialUser(userId).name, isOnline: [...this.clients.values()].some(c => c.user.id === userId && this.active(c)), lastSeen: this.lastSeen.get(userId) ?? new Date(0).toISOString() }; }
+  callsFor(viewer: string) { return this.calls.filter(c => c.participantIds.includes(viewer) && this.auth.canAccessRoom(viewer, c.roomId)).map(c => ({ ...c, users: c.participantIds.filter(id => id !== viewer).map(id => this.auth.socialUser(id)) })); }
+  react(viewer: string, roomId: string, messageId: string, emoji: unknown) {
+    if (!this.canInteract(viewer, roomId)) throw new ApiError(403, 'Room permission required');
+    if (typeof emoji !== 'string' || !['❤️', '👍', '😂', '😮', '😢'].includes(emoji)) throw new ApiError(400, 'Invalid reaction');
+    const message = this.visibleHistory(viewer, roomId).find(m => m.id === messageId); if (!message) throw new ApiError(404, 'Message unavailable');
+    message.reactions ??= []; const previous = message.reactions.find(r => r.userId === viewer); message.reactions = message.reactions.filter(r => r.userId !== viewer);
+    if (previous?.emoji !== emoji) message.reactions.push({ userId: viewer, emoji }); this.saveMessages(); this.broadcastToRoom(roomId, { type: 'message_received', roomId, message });
+  }
   private setupServer(): void {
     this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
@@ -139,6 +188,7 @@ export class WebSocketHub {
         this.send(ws, { type: 'error', reason: 'Join the room first' }); return;
       }
     }
+    if (existingClient && envelope.roomId && ['send_message', 'typing', 'call_signal', 'update_room_theme'].includes(envelope.type) && !this.canInteract(existingClient.user.id, envelope.roomId)) { this.send(ws, { type: 'error', reason: 'Messaging is restricted for this account' }); return; }
     switch (envelope.type) {
       case 'auth': {
         if (existingClient) { this.send(ws, { type: 'error', reason: 'Already authenticated' }); return; }
@@ -163,14 +213,14 @@ export class WebSocketHub {
         this.send(ws, { type: 'authenticated', user });
 
         for (const peer of this.clients.values()) {
-          if (this.active(peer) && this.auth.shareCircle(user.id, peer.user.id)) this.send(ws, { type: 'presence_updated', presence: { userId: peer.user.id, displayName: peer.user.displayName, isOnline: true, lastSeen: new Date().toISOString() } });
+          if (this.active(peer) && this.auth.shareCircle(user.id, peer.user.id) && (this.profiles?.canSeePresence(user.id, peer.user.id) ?? true)) this.send(ws, { type: 'presence_updated', presence: { userId: peer.user.id, displayName: peer.user.displayName, isOnline: true, lastSeen: new Date().toISOString() } });
         }
         // Broadcast presence online to circle
         this.broadcastPresence(user.id, user.displayName, true);
 
         // Send room history and current theme for all pre-joined rooms
         for (const roomId of client.joinedRooms) {
-          const history = this.messageHistory.get(roomId) || [];
+          const history = this.visibleHistory(user.id, roomId);
           this.send(ws, { type: 'room_history', roomId, history });
 
           const theme = this.roomThemes.get(roomId);
@@ -184,7 +234,7 @@ export class WebSocketHub {
       case 'join_room': {
         if (!existingClient || !envelope.roomId) return;
         existingClient.joinedRooms.add(envelope.roomId);
-        const history = this.messageHistory.get(envelope.roomId) || [];
+        const history = this.visibleHistory(existingClient.user.id, envelope.roomId);
         this.send(ws, { type: 'room_history', roomId: envelope.roomId, history });
         const theme = this.roomThemes.get(envelope.roomId);
         if (theme) {
@@ -204,6 +254,7 @@ export class WebSocketHub {
         const msg: ChatMessage = { id: envelope.message.id, roomId: envelope.roomId, senderId: existingClient!.user.id,
           senderName: existingClient!.user.displayName, senderAvatarURL: existingClient!.user.avatarURL, content: envelope.message.content,
           timestamp: new Date().toISOString(), status: 'sent' };
+        if (envelope.message.replyToId) { const original = this.visibleHistory(existingClient!.user.id, envelope.roomId).find(m => m.id === envelope.message!.replyToId); if (!original) { this.send(ws, { type: 'error', reason: 'Reply unavailable' }); return; } msg.replyToId = original.id; }
         if (envelope.message.mediaAttachment) {
           const attachment = envelope.message.mediaAttachment;
           let filename: string;
@@ -282,6 +333,7 @@ export class WebSocketHub {
           }
         });
 
+        if (sig.signalType === 'offer' && !this.calls.some(c => c.id === sig.callId)) { const room = this.auth.chatRooms(existingClient!.user.id).find(r => r.id === envelope.roomId)!; this.calls.push({ id: sig.callId, roomId: sig.roomId, callerId: sig.senderId, date: new Date().toISOString(), isVideo: sig.isVideo, participantIds: room.participantIds }); this.calls = this.calls.slice(-2000); fs.writeFileSync(path.join(this.dataDir, 'calls.json'), JSON.stringify(this.calls), { mode: 0o600 }); }
         if (sig.targetId) {
           this.sendToUser(sig.targetId, {
             type: 'call_signal',
@@ -358,7 +410,7 @@ export class WebSocketHub {
   private broadcastToRoom(roomId: string, envelope: ServerMessageEnvelope, excludeWs?: WebSocket): void {
     const payload = JSON.stringify(envelope);
     for (const [ws, client] of this.clients.entries()) {
-      if (this.active(client) && ws !== excludeWs && client.joinedRooms.has(roomId) && ws.readyState === WebSocket.OPEN) {
+      if (this.active(client) && ws !== excludeWs && client.joinedRooms.has(roomId) && this.auth.canAccessRoom(client.user.id, roomId) && ws.readyState === WebSocket.OPEN) {
         ws.send(payload);
       }
     }
@@ -374,6 +426,7 @@ export class WebSocketHub {
   }
 
   private broadcastPresence(userId: string, displayName: string, isOnline: boolean): void {
+    this.lastSeen.set(userId, new Date().toISOString());
     const payload = JSON.stringify({
       type: 'presence_updated',
       presence: {
@@ -385,7 +438,7 @@ export class WebSocketHub {
     });
 
     for (const [ws, client] of this.clients.entries()) {
-      if (this.active(client) && this.auth.shareCircle(userId, client.user.id) && ws.readyState === WebSocket.OPEN) {
+      if (this.active(client) && this.auth.shareCircle(userId, client.user.id) && (this.profiles?.canSeePresence(client.user.id, userId) ?? true) && ws.readyState === WebSocket.OPEN) {
         ws.send(payload);
       }
     }

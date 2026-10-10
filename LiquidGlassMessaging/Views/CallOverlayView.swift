@@ -42,7 +42,7 @@ public struct CallOverlayView: View {
                     }.padding(14).glassEffect(.regular, in: Capsule()).padding(.bottom, 24)
                 }
             }.padding(.top, 24)
-        }
+        }.environment(\.profileContext, ProfileContext(source: "call_screen")).profilePresentationHost(dismissParentOnNavigate: false)
     }
     private func control(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol).frame(width: 44, height: 44) }.buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel(label)
@@ -52,7 +52,7 @@ public struct CallOverlayView: View {
             if let track { CallVideoView(track: track).frame(height: 220).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)) }
             else if let user { CircleAvatar(user: user, size: 80).frame(maxWidth: .infinity).frame(height: 220) }
             else { Image(systemName: "person.fill").font(.largeTitle).foregroundStyle(theme.accent).frame(maxWidth: .infinity).frame(height: 220) }
-            Text(user?.name ?? name).font(.headline).lineLimit(1)
+            Text(user?.name ?? name).font(.headline).lineLimit(1).profileEntry(user?.id ?? "", name: user?.name ?? name, enabled: user != nil)
         }.padding(12).circleSurface()
     }
 }

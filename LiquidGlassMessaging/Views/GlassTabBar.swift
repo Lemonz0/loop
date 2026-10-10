@@ -24,6 +24,8 @@ struct GlassTabBar: View {
             Tab("Settings", systemImage: "gearshape", value: CircleTab.settings) { SettingsRootView(socialModel: model) }
             Tab("Profile", systemImage: "person.crop.circle", value: CircleTab.profile) { ProfileView() }
         }
+        .profilePresentationHost(dismissParentOnNavigate: false)
+        .onChange(of: ProfilePresentation.shared.destination?.id) { _, id in if id != nil { selectedTab = .chats } }
         .environment(\.conversationDockContext, metrics)
         .environment(\.usesSharedConversationDock, true)
         .environment(\.conversationDockHeight, metrics.height)
@@ -59,13 +61,14 @@ struct GlassTabBar: View {
 private enum CircleTab: Hashable { case home, chats, settings, profile }
 
 struct ProfileView: View {
+    @State private var editing = false
     var body: some View {
         NavigationStack {
             ZStack {
                 AmbientGlowBackground()
-                ScrollView { ProfileCard().padding(20) }
+                ScrollView { VStack(spacing: 14) { ProfileCard(); Button("Edit profile details & privacy", systemImage: "pencil") { editing = true }.buttonStyle(.glassProminent).frame(minHeight: 44) }.padding(20) }
             }
-            .navigationTitle("Profile")
+            .navigationTitle("Profile").sheet(isPresented: $editing) { ProfileEditorView() }
         }
     }
 }

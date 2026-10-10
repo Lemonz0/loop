@@ -33,6 +33,8 @@ export interface ChatMessage {
   senderId: string;
   senderName: string;
   senderAvatarURL?: string;
+  replyToId?: string;
+  reactions?: { userId: string; emoji: string }[];
   content: string;
   mediaAttachment?: MediaAttachment;
   timestamp: string;

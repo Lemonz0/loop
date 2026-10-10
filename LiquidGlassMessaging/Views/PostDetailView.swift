@@ -34,7 +34,7 @@ struct PostDetailView: View {
                                     commentFocused = true
                                     proxy.scrollTo("comments", anchor: .top)
                                 }
-                                (Text(post.author.name).bold() + Text(" " + post.caption))
+                                VStack(alignment: .leading, spacing: 4) { Text(post.author.name).bold().profileEntry(post.author.id, name: post.author.name, source: "social"); ProfileMentionText(text: post.caption, users: Array(AppEnvironment.shared.chatStore.memberProfiles.values)) }
                                     .font(.body).textSelection(.enabled)
                                 comments(post).id("comments")
                             } else {
@@ -49,7 +49,7 @@ struct PostDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let post { composer(post) }
         }
-        .sheet(isPresented: $showLikes) { PostLikesView(postID: postID, model: model) }
+        .sheet(isPresented: $showLikes) { PostLikesView(postID: postID, model: model).environment(\.profileContext, ProfileContext(source: "reaction")).profilePresentationHost() }
         .fullScreenCover(item: $selectedPhoto) { selection in
             PostPhotoViewer(selection: selection)
         }
@@ -73,7 +73,7 @@ struct PostDetailView: View {
         HStack(spacing: 12) {
             CircleAvatar(user: post.author, size: 48)
             VStack(alignment: .leading, spacing: 3) {
-                Text(post.author.name).font(.headline).lineLimit(1)
+                Text(post.author.name).profileEntry(post.author.id, name: post.author.name, source: "social").font(.headline).lineLimit(1)
                 Text(post.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline).foregroundStyle(theme.secondaryText)
             }
@@ -125,7 +125,7 @@ struct PostDetailView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 4) {
                             if let author {
-                                Text(author.name).font(.subheadline.weight(.semibold)).foregroundStyle(theme.secondaryText)
+                                Text(author.name).profileEntry(author.id, name: author.name, source: "social").font(.subheadline.weight(.semibold)).foregroundStyle(theme.secondaryText)
                             }
                             Text(body).font(.body).textSelection(.enabled)
                         }.padding(.horizontal, 16).padding(.vertical, 12).circleSurface(radius: 22)

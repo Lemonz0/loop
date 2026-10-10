@@ -56,3 +56,8 @@ Server/data/social.json.*.tmp
 # Private runtime chat history and wallpapers
 Server/data/messages.json
 Server/data/themes.json
+
+# Private profile relationships, notes, and call history
+Server/data/profiles.json
+Server/data/profiles.json.*.tmp
+Server/data/calls.json

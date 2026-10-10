@@ -25,9 +25,11 @@ public actor AccountHTTPClient {
         session = URLSession(configuration: configuration, delegate: AccountRedirectDelegate(), delegateQueue: nil)
     }
     public func request<T: Decodable & Sendable>(_ path: String, baseURL: URL, token: String? = nil,
-                                                 body: Data? = nil, as type: T.Type) async throws -> T {
+                                                 body: Data? = nil, query: [URLQueryItem] = [], as type: T.Type) async throws -> T {
         guard AccountCodec.serverURL(baseURL.absoluteString) != nil else { throw AccountHTTPError(status: 0, message: "Use HTTPS, or an HTTP address on your local network.") }
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { components.queryItems = query }
+        var request = URLRequest(url: components.url!)
         request.timeoutInterval = 15; request.cachePolicy = .reloadIgnoringLocalCacheData
         request.httpMethod = body == nil ? "GET" : "POST"
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }

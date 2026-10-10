@@ -18,6 +18,7 @@ public struct ChatRoomView: View {
     @Bindable public var callManager = WebRTCManager.shared
 
     @State private var inputText: String = ""
+    @State private var showsMembers = false
     @State private var isCallPresented: Bool = false
     @State private var selectedWallpaperItem: PhotosPickerItem? = nil
     @State private var isShowingWallpaperPicker: Bool = false
@@ -84,7 +85,14 @@ public struct ChatRoomView: View {
                     }
                     .coordinateSpace(name: "chat_room_scroll_\(room.id)")
                     .safeAreaBar(edge: .top, spacing: 0) {
-                        GlassEffectContainer(spacing: 14) { chatHeader }
+                        GlassEffectContainer(spacing: 14) {
+                            VStack(spacing: 8) {
+                                chatHeader
+                                if let reply = chatStore.replyDraft, reply.roomId == room.id {
+                                    HStack { Text("Replying to " + reply.senderName).font(.caption); Spacer(); Button("Cancel reply", systemImage: "xmark") { chatStore.replyDraft = nil }.buttonStyle(.glass) }.padding(12).circleSurface().padding(.horizontal, 16)
+                                }
+                            }
+                        }
                     }
                     .scrollEdgeEffectStyle(.soft, for: .top)
                     .onChange(of: chatStore.messagesByRoomId[room.id]?.count) { _, _ in
@@ -134,6 +142,8 @@ public struct ChatRoomView: View {
         #if os(iOS)
         .background { ConversationBackSwipe().frame(width: 0, height: 0).allowsHitTesting(false) }
         #endif
+        .environment(\.profileContext, ProfileContext(source: "message", roomID: room.id, circleID: AuthSessionManager.shared.circles.first { $0.roomId == room.id }?.id))
+        .sheet(isPresented: $showsMembers) { ProfileDirectoryView(room: room) }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         #if os(iOS)
@@ -184,11 +194,13 @@ public struct ChatRoomView: View {
                         .fill(theme.success)
                         .frame(width: 7, height: 7)
 
-                    Text(room.isGroup ? "\(chatStore.onlineCount(in: room)) online" : (room.participantIds.contains(where: { $0 != AuthSessionManager.shared.currentSession?.user.id && chatStore.presenceByUserId[$0]?.isOnline == true }) ? "Online" : "Offline")).lineLimit(1)
+                    Text(room.isGroup ? "\(chatStore.onlineCount(in: room)) online" : (room.participantIds.contains(where: { $0 != AuthSessionManager.shared.currentSession?.user.id && chatStore.presenceByUserId[$0]?.isOnline == true }) ? "Online" : "Recently")).lineLimit(1)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(theme.secondaryText)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+                .profileEntry(room.participantIds.first { $0 != AuthSessionManager.shared.currentSession?.user.id } ?? "", name: room.name, enabled: !room.isGroup)
+                .onTapGesture { if room.isGroup { showsMembers = true } }
 
             GlassEffectContainer(spacing: 0) {
                 HStack(spacing: 0) {

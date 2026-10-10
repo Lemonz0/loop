@@ -28,7 +28,7 @@ struct StoriesRow: View {
                                     .overlay {
                                         Circle().strokeBorder(story.isSeen ? AnyShapeStyle(Color.secondary) : AnyShapeStyle(LinearGradient(colors: theme.storyRingColors, startPoint: .topLeading, endPoint: .bottomTrailing)), lineWidth: 2.5)
                                     }
-                                Text(story.user.name).font(.caption.weight(.medium)).lineLimit(1)
+                                Text(story.user.name).profileEntry(story.user.id, name: story.user.name, source: "stories").font(.caption.weight(.medium)).lineLimit(1)
                                 Text(story.createdAt, style: .relative).font(.caption2).foregroundStyle(theme.secondaryText)
                             }
                             .frame(width: 76)

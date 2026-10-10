@@ -5,6 +5,7 @@ public struct User: Identifiable, Codable, Hashable, Sendable {
     public var name: String
     public var avatarURL: URL?
     public var allowsTrollPosts: Bool
+    public var username: String? = nil
 }
 
 public struct CircleMedia: Codable, Hashable, Sendable {

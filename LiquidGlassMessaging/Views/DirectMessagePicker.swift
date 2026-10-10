@@ -16,17 +16,15 @@ struct DirectMessagePicker: View {
                         VStack(spacing: 14) {
                             if users.isEmpty { ContentUnavailableView("No friends yet", systemImage: "person.2", description: Text("Invite a friend to your circle first.")) }
                             ForEach(users) { user in
-                                Button {
-                                    opening = user.id; error = nil
-                                    Task {
-                                        if !(await onOpen(user)) { error = AuthSessionManager.shared.lastError ?? "Could not open this chat."; AuthSessionManager.shared.lastError = nil }
-                                        opening = nil
-                                    }
-                                } label: {
-                                    HStack(spacing: 12) { CircleAvatar(user: user); Text(user.name).font(.headline); Spacer(); if opening == user.id { ProgressView() } }
-                                        .padding(14).frame(minHeight: 44)
-                                }.buttonStyle(.plain).circleSurface(interactive: true).disabled(opening != nil)
-                                    .accessibilityLabel("Message \(user.name)")
+                                HStack(spacing: 12) {
+                                    CircleAvatar(user: user)
+                                    Text(user.name).font(.headline).profileEntry(user.id, name: user.name, source: "contact_search")
+                                    Spacer()
+                                    Button("Message", systemImage: "bubble.left") {
+                                        opening = user.id; error = nil
+                                        Task { if !(await onOpen(user)) { error = AuthSessionManager.shared.lastError ?? "Could not open chat"; AuthSessionManager.shared.lastError = nil }; opening = nil }
+                                    }.buttonStyle(.glass).disabled(opening != nil)
+                                }.padding(14).circleSurface()
                             }
                             if let error { Text(error).font(.footnote).foregroundStyle(theme.destructive) }
                         }.padding(20)
@@ -35,7 +33,7 @@ struct DirectMessagePicker: View {
             }.navigationTitle("Direct message")
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(opening != nil) } }
                 .interactiveDismissDisabled(opening != nil)
-        }
+        }.environment(\.profileContext, ProfileContext(source: "contact_search")).profilePresentationHost()
     }
 }
 #Preview("DM picker · dark") { DirectMessagePicker(users: MockData.snapshot().friends, onOpen: { _ in true }).circlePreviewTheme(.aurora) }

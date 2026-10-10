@@ -133,7 +133,7 @@ struct StoryViewer: View {
         HStack(spacing: 10) {
             CircleAvatar(user: story.user, size: 38)
             VStack(alignment: .leading, spacing: 3) {
-                Text(story.user.name).font(.headline)
+                Text(story.user.name).profileEntry(story.user.id, name: story.user.name, source: "social").font(.headline)
                 HStack(spacing: 4) {
                     Text(story.createdAt, style: .relative)
                     Text("· disappears in \(max(1, Int(ceil(story.expiresAt.timeIntervalSinceNow / 3600))))h")

@@ -7,6 +7,7 @@ import { saveUploadedFile, streamMediaFile } from './storage.js';
 import { SocialStore } from './social.js';
 import { uploadSocialPhoto } from './socialMedia.js';
 import { AuthStore, ApiError } from './auth.js';
+import { ProfileStore } from './profiles.js';
 import { serverLogger } from './logger.js';
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
@@ -42,6 +43,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
   const auth = new AuthStore(options.dataDirectory ?? path.resolve(process.cwd(), 'data'), options.bootstrapKey ?? process.env.INVITE_KEY, options.now);
   const uploadsDirectory = options.dataDirectory ? path.join(options.dataDirectory, 'uploads') : undefined;
   const social = new SocialStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'), uploadsDirectory ?? path.resolve(process.cwd(), 'uploads'), options.now);
+  const profiles = new ProfileStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'));
   const attempts = new Map<string, { count: number; expiresAt: number }>();
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -64,6 +66,22 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
         if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) servers.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USERNAME, credential: process.env.TURN_PASSWORD });
         json(res, 200, { servers }); return;
       }
+      if (url.pathname === '/api/profiles/settings' && req.method === 'GET') { json(res, 200, profiles.settings(user.id)); return; }
+      if (url.pathname === '/api/profiles/requests' && req.method === 'GET') { json(res, 200, { users: profiles.requestsFor(user.id) }); return; }
+      if (url.pathname === '/api/profiles/settings' && req.method === 'POST') { const card = profiles.edit(user.id, await readJSON(req)); hub.notifyAccountChange(user.id); hub.refreshPresence(); json(res, 200, card); return; }
+      if (url.pathname === '/api/calls/history' && req.method === 'GET') { json(res, 200, { calls: hub.callsFor(user.id) }); return; }
+      const profileRoute = /^\/api\/profiles\/([^/]+)(?:\/(actions|group))?$/.exec(url.pathname);
+      if (profileRoute) {
+        const [, target, action] = profileRoute;
+        if (!action && req.method === 'GET') {
+          const card = profiles.card(user.id, target, url.searchParams.get('circleId') ?? undefined);
+          json(res, 200, { ...card, sharedItems: card.state === 'active' ? hub.sharedItems(user.id, target, url.searchParams.get('roomId') ?? undefined) : [], presence: card.presenceVisible ? hub.presenceFor(target) : undefined }); return;
+        }
+        if (action === 'actions' && req.method === 'POST') { const card = profiles.action(user.id, target, await readJSON(req)); hub.refreshPresence(); hub.refreshHistories(user.id); hub.refreshHistories(target); hub.notifyAccountChange(user.id); json(res, 200, card); return; }
+        if (action === 'group' && req.method === 'POST') { const body = await readJSON(req); const room = auth.manageMember(user.id, target, String(body.circleId), String(body.action)); hub.synchronizeRooms(); hub.notifyCircleChange(room); hub.notifyAccountChange(target); json(res, 200, { success: true }); return; }
+      }
+      const chatAction = /^\/api\/chats\/([^/]+)\/messages\/([^/]+)\/reaction$/.exec(url.pathname);
+      if (chatAction && req.method === 'POST') { const body = await readJSON(req); hub.react(user.id, chatAction[1], chatAction[2], body.emoji); json(res, 200, { success: true }); return; }
       const memberRoute = /^\/api\/circles\/([^/]+)\/members$/.exec(url.pathname);
       if (memberRoute && req.method === 'GET') { json(res, 200, { users: auth.members(user.id, memberRoute[1]) }); return; }
       if (url.pathname === '/api/auth/me'  && req.method === 'GET') { json(res, 200, { user, circles: auth.circlesFor(user.id) }); return; }
@@ -72,7 +90,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       if (renameRoute && req.method === 'POST') { const body = await readJSON(req); const circle = auth.renameCircle(user.id, renameRoute[1], body.name); hub.notifyCircleChange(circle.roomId); json(res, 200, { circle }); return; }
       if (url.pathname === '/api/auth/logout' && req.method === 'POST') { auth.logout(token); json(res, 200, { success: true }); return; }
       if (url.pathname === '/api/chats' && req.method === 'GET') { json(res, 200, { rooms: auth.chatRooms(user.id) }); return; }
-      if (url.pathname === '/api/chats/direct' && req.method === 'POST') { const body = await readJSON(req); const room = auth.directRoom(user.id, body.userId); hub.synchronizeRooms(); json(res, 200, { room }); return; }
+      if (url.pathname === '/api/chats/direct' && req.method === 'POST') { const body = await readJSON(req); if (typeof body.userId !== 'string' || !profiles.canContact(user.id, body.userId)) throw new ApiError(403, 'This account cannot be contacted'); const room = auth.directRoom(user.id, body.userId); hub.synchronizeRooms(); json(res, 200, { room }); return; }
       if (url.pathname === '/api/circles' && req.method === 'GET') { json(res, 200, { circles: auth.circlesFor(user.id) }); return; }
       if (url.pathname === '/api/circles' && req.method === 'POST') { const body = await readJSON(req); const circle = auth.createCircle(user.id, body.name); hub.synchronizeRooms(); json(res, 201, { circle }); return; }
       if (url.pathname === '/api/invites/join' && req.method === 'POST') { const body = await readJSON(req); const circle = auth.joinInvite(user.id, body.secretKey); hub.notifyAccountChange(user.id); json(res, 200, { circle }); return; }
@@ -84,6 +102,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       if (socialRoute) {
         const [, circleId, kind, id, action] = socialRoute;
         auth.members(user.id, circleId);
+        if (req.method === 'POST' && !auth.canWriteRoom(user.id, auth.circlesFor(user.id).find(c => c.id === circleId)!.roomId)) throw new ApiError(403, 'Group permissions are restricted');
         if (!kind && req.method === 'GET') { json(res, 200, social.snapshot(user.id, circleId)); return; }
         if (kind === 'media' && req.method === 'POST') { json(res, 201, await uploadSocialPhoto(req, auth, user.id, circleId, uploadsDirectory ?? path.resolve(process.cwd(), 'uploads'))); return; }
         if (kind === 'posts' && id && action === 'likes' && req.method === 'GET') { json(res, 200, social.postLikes(user.id, circleId, id)); return; }
@@ -120,7 +139,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       }
       if (url.pathname.startsWith('/uploads/') && req.method === 'GET') {
         const filename = url.pathname.slice('/uploads/'.length);
-        if (filename !== path.basename(filename) || (!auth.canAccessMedia(user.id, filename) || !social.canReadMedia(user.id, filename))) throw new ApiError(404, 'File not found');
+        if (filename !== path.basename(filename) || (!auth.canAccessMedia(user.id, filename) || !social.canReadMedia(user.id, filename) || !hub.canReadChatMedia(user.id, filename))) throw new ApiError(404, 'File not found');
         res.setHeader('Cache-Control', 'private, no-store'); streamMediaFile(req, res, filename, uploadsDirectory); return;
       }
       json(res, 404, { error: 'Endpoint not found' });
@@ -132,13 +151,13 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
     });
   });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
-  const hub = new WebSocketHub(wss, auth, options.dataDirectory);
+  const hub = new WebSocketHub(wss, auth, options.dataDirectory, profiles);
   server.on('upgrade', (request, socket, head) => {
     if (wss.clients.size >= 1000) { socket.destroy(); return; }
     if (new URL(request.url ?? '/', 'http://localhost').pathname !== '/ws') { socket.destroy(); return; }
     wss.handleUpgrade(request, socket, head, ws => { wss.emit('connection', ws, request); });
   });
-  return { server, wss, auth, social };
+  return { server, wss, auth, social, profiles };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { server } = createLoopServer();

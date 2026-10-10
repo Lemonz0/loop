@@ -16,11 +16,12 @@ public extension View {
 
 private struct CircleSurfaceModifier: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.appTheme) private var theme
     let radius: CGFloat
     let interactive: Bool
     func body(content: Content) -> some View {
-        let glass = reduceTransparency ? Glass.regular.tint(theme.backgroundBase) : Glass.regular
+        let glass = (reduceTransparency || contrast == .increased) ? Glass.regular.tint(theme.backgroundBase) : Glass.regular
         content.glassEffect(interactive ? glass.interactive() : glass,
                             in: RoundedRectangle(cornerRadius: radius, style: .continuous))
     }
@@ -30,12 +31,13 @@ struct CircleAvatar: View {
     @Environment(\.appTheme) private var theme
     let user: User
     var size: CGFloat = 40
+    var opensProfile = true
     var body: some View {
         ZStack {
             if let url = user.avatarURL {
                 CircleMediaView(media: CircleMedia(url: url), placeholderSymbol: "person.fill")
             } else {
-                Image(systemName: "person.fill")
+                Text(user.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased())
                     .font(.system(size: size * 0.4, weight: .medium))
                     .foregroundStyle(theme.accent)
             }
@@ -43,7 +45,8 @@ struct CircleAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .glassEffect(.regular.tint(theme.glassTint), in: Circle())
-        .accessibilityHidden(true)
+        .profileEntry(user.id, name: user.name, enabled: opensProfile)
+        .accessibilityHidden(!opensProfile)
     }
 }
 

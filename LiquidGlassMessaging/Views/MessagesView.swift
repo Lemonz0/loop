@@ -158,6 +158,8 @@ public struct MessagesView: View {
     @State private var showNewGroupSheet = false
     @State private var showDirectPicker = false
     @State private var showArchivedSheet = false
+    @State private var showContacts = false
+    @State private var showCallHistory = false
 
     @Namespace private var glassNamespace
 
@@ -303,6 +305,10 @@ public struct MessagesView: View {
                 }
             }
         }
+        .onChange(of: ProfilePresentation.shared.destination?.id) { _, _ in openProfileDestination() }
+        .onAppear { openProfileDestination() }
+        .sheet(isPresented: $showContacts) { ProfileDirectoryView(room: nil) }
+        .sheet(isPresented: $showCallHistory) { LoopCallHistoryView() }
         .refreshable { _ = await auth.validateSavedSession(serverURL: AppEnvironment.shared.serverBaseURL) }
         .alert("Edit loop name", isPresented: $showRename) {
             TextField("Loop name", text: $loopName)
@@ -352,12 +358,23 @@ public struct MessagesView: View {
         }
     }
 
+    private func openProfileDestination() {
+        guard let room = ProfilePresentation.shared.destination, let id = UUID(uuidString: room.id) else { return }
+        showDirectPicker = false; showContacts = false; showCallHistory = false
+        if chatStore.activeRoom?.id != room.id {
+            path = [Chat(id: id, title: room.name, isGroup: false, initials: String(room.name.prefix(1)), avatarURL: room.avatarURL, timestamp: "", subtitle: "", isVerifiedOrRead: false, unreadCount: 0)]
+        }
+        ProfilePresentation.shared.destination = nil
+    }
+
     // MARK: - Dedicated Single-Layer Liquid Glass Header (Zero Double Backgrounds)
 
     private var glassHeader: some View {
         HStack {
             // Top Left: Reorganize & Filter Menu (EXACTLY ONE background, pure Liquid Glass circle)
             Menu {
+                Button("Contacts & search", systemImage: "person.2") { showContacts = true }
+                Button("Call history", systemImage: "phone") { showCallHistory = true }
                 Section("Filter") {
                     Button {
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
@@ -502,7 +519,7 @@ public struct OnlineContactsRow: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 18) {
                 ForEach(contacts) { contact in
-                    Button { onOpen(contact) } label: {
+                    VStack(spacing: 0) {
                     VStack(spacing: 8) {
                         // GlassEffectContainer prevents stacking glass on glass without a container
                         GlassEffectContainer(spacing: 2) {
@@ -537,7 +554,7 @@ public struct OnlineContactsRow: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(theme.secondaryText)
                     }
-                    }.buttonStyle(.plain).accessibilityLabel("Message \(contact.name), online")
+                    }.profileEntry(contact.id, name: contact.name, source: "contacts")
                 }
             }
             .padding(.horizontal, 20)
@@ -548,6 +565,8 @@ public struct OnlineContactsRow: View {
 // MARK: - Subview: ChatRowCard
 
 public struct ChatRowCard: View {
+    private var profileRoom: ChatRoom? { AppEnvironment.shared.chatStore.rooms.first { UUID(uuidString: $0.id) == chat.id } }
+    private var peerID: String? { profileRoom?.participantIds.first { $0 != AuthSessionManager.shared.currentSession?.user.id } }
     @Environment(\.appTheme) private var theme
     public let chat: Chat
 
@@ -566,7 +585,7 @@ public struct ChatRowCard: View {
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.primary)
                     } else {
-                        CircleAvatar(user: User(id: chat.id.uuidString, name: chat.title, avatarURL: chat.avatarURL, allowsTrollPosts: true), size: 50)
+                        CircleAvatar(user: User(id: peerID ?? "", name: chat.title, avatarURL: chat.avatarURL, allowsTrollPosts: true), size: 50, opensProfile: peerID != nil)
                     }
                 }
                 .frame(width: 52, height: 52)
@@ -578,7 +597,7 @@ public struct ChatRowCard: View {
                 // Text Information
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(chat.title)
+                        Text(chat.title).profileEntry(peerID ?? "", name: chat.title, enabled: !chat.isGroup && peerID != nil)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)

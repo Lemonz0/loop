@@ -6,8 +6,8 @@ import { AuthSession, UserProfile } from './types.js';
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-interface Account { user: UserProfile; salt: string; passwordHash: string; consentVersion?: number }
-interface Circle { createdAt?: string; id: string; name: string; ownerId?: string; memberIds: string[]; roomId: string }
+interface Account { user: UserProfile; salt: string; passwordHash: string; consentVersion?: number; createdAt?: string }
+interface Circle { createdAt?: string; id: string; name: string; ownerId?: string; memberIds: string[]; roomId: string; membership?: Record<string, { role: string; joinedAt: string; addedBy: string; restricted: boolean }> }
 interface Invite { hash: string; circleId: string; expiresAt: number; uses: number; maxUses: number }
 interface SessionRecord { hash: string; userId: string; issuedAt: number; expiresAt: number }
 interface DirectRoom { id: string; memberIds: string[]; creatorId: string; active: boolean; createdAt: string }
@@ -77,7 +77,9 @@ export class AuthStore {
       const circle = draft.circles.find(c => c.id === invite.circleId);
       if (!circle) throw new ApiError(401, 'Invalid or expired invite');
       const user = { id: randomUUID(), username, displayName };
-      draft.accounts.push({ user, salt, passwordHash });
+      draft.accounts.push({ user, salt, passwordHash, createdAt: new Date(this.now()).toISOString() });
+      circle.membership ??= {};
+      circle.membership[user.id] = { role: circle.ownerId ? 'Member' : 'Owner', joinedAt: new Date(this.now()).toISOString(), addedBy: circle.ownerId ?? user.id, restricted: false };
       circle.memberIds.push(user.id); circle.ownerId ??= user.id; invite.uses++;
       return this.issueSession(draft, user);
     });
@@ -147,7 +149,9 @@ export class AuthStore {
       if (!invite) throw new ApiError(401, 'Invalid or expired invite');
       const circle = draft.circles.find(c => c.id === invite.circleId)!;
       if (circle.memberIds.includes(userId)) throw new ApiError(409, 'Already a circle member');
-      circle.memberIds.push(userId); invite.uses++; return { ...circle };
+      circle.memberIds.push(userId); circle.membership ??= {};
+      circle.membership[userId] = { role: 'Member', joinedAt: new Date(this.now()).toISOString(), addedBy: circle.ownerId ?? userId, restricted: false };
+      invite.uses++; return { ...circle };
     });
   }
   directRoom(userId: string, peerId: unknown) {
@@ -182,6 +186,34 @@ export class AuthStore {
   roomsFor(userId: string): string[] { return [...this.circlesFor(userId).map(c => c.roomId), ...this.state.directRooms!.filter(r => r.memberIds.includes(userId)).map(r => r.id)]; }
   canAccessRoom(userId: string, roomId: string): boolean { return this.roomsFor(userId).includes(roomId); }
   shareCircle(first: string, second: string) { return this.state.circles.some(c => c.memberIds.includes(first) && c.memberIds.includes(second)); }
+  profileIdentity(viewer: string, target: string) {
+    if (viewer !== target && !this.shareCircle(viewer, target) && !this.state.directRooms!.some(r => r.memberIds.includes(viewer) && r.memberIds.includes(target))) throw new ApiError(404, 'Profile unavailable');
+    const account = this.state.accounts.find(a => a.user.id === target);
+    if (!account) return { user: { id: target, username: '', displayName: 'Deleted account' }, deleted: true };
+    return { user: { ...account.user }, memberSince: account.createdAt, deleted: false };
+  }
+  membership(viewer: string, target: string, circleId: string) {
+    const circle = this.circlesFor(viewer).find(c => c.id === circleId && c.memberIds.includes(target));
+    if (!circle) throw new ApiError(404, 'Group membership unavailable');
+    const membership = circle.membership?.[target];
+    return { circleId, name: circle.name, role: target === circle.ownerId ? 'Owner' : membership?.role ?? 'Member', joinedAt: membership?.joinedAt,
+      addedBy: membership ? this.socialUser(membership.addedBy).name : undefined, restricted: membership?.restricted ?? false, canManage: circle.ownerId === viewer && target !== viewer };
+  }
+  manageMember(viewer: string, target: string, circleId: string, action: string) {
+    const circle = this.state.circles.find(c => c.id === circleId && c.ownerId === viewer && target !== viewer && c.memberIds.includes(target));
+    if (!circle) throw new ApiError(403, 'Only the owner can manage other group members');
+    if (!['promote', 'demote', 'restrict', 'unrestrict', 'remove'].includes(action)) throw new ApiError(400, 'Invalid member action');
+    this.commit(draft => {
+      const group = draft.circles.find(c => c.id === circleId)!; group.membership ??= {};
+      const member = group.membership[target] ?? { role: 'Member', joinedAt: '', addedBy: viewer, restricted: false };
+      if (action === 'remove') { group.memberIds = group.memberIds.filter(id => id !== target); delete group.membership[target]; }
+      else { if (action === 'promote' || action === 'demote') member.role = action === 'promote' ? 'Admin' : 'Member'; else member.restricted = action === 'restrict'; group.membership[target] = member; }
+    });
+    return circle.roomId;
+  }
+  canWriteRoom(userId: string, roomId: string) {
+    return this.canAccessRoom(userId, roomId) && !this.state.circles.find(c => c.roomId === roomId)?.membership?.[userId]?.restricted;
+  }
   mediaCircle(fileName: string): string | undefined {
     const media = this.state.media[fileName]; return typeof media === 'string' ? media : media?.circleId;
   }
@@ -198,7 +230,7 @@ export class AuthStore {
   socialUser(id: string) {
     const account = this.state.accounts.find(a => a.user.id === id);
     if (!account) throw new ApiError(404, 'User not found');
-    return { id, name: account.user.displayName, avatarURL: account.user.avatarURL, allowsTrollPosts: account.user.allowsTrollPosts ?? true };
+    return { id, username: account.user.username, name: account.user.displayName, avatarURL: account.user.avatarURL, allowsTrollPosts: account.user.allowsTrollPosts ?? true };
   }
   consentVersion(id: string) { return this.state.accounts.find(a => a.user.id === id)?.consentVersion ?? 0; }
   setConsent(userId: string, allowed: boolean) {

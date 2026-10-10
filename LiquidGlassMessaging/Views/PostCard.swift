@@ -27,7 +27,7 @@ struct PostCard: View {
     private var owned: Bool { post.author.id == model.currentUserID }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            PostHeader(post: post).contentShape(Rectangle()).onTapGesture { showDetail = true }
+            PostHeader(post: post)
             PostPhotos(post: post).onTapGesture { showDetail = true }
             Text(post.caption).font(.body).onTapGesture { showDetail = true }
             HStack(spacing: 12) {
@@ -54,9 +54,9 @@ struct PostCard: View {
                 Button("Delete post", role: .destructive) { Task { await model.delete(post) } }
                 Button("Cancel", role: .cancel) {}
             }
-            .fullScreenCover(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model) }
+            .fullScreenCover(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model).profilePresentationHost() }
             .sheet(isPresented: $showEdit) { EditPostView(post: post, model: model) }
-            .sheet(isPresented: $showLikes) { PostLikesView(postID: post.id, model: model) }
+            .sheet(isPresented: $showLikes) { PostLikesView(postID: post.id, model: model).environment(\.profileContext, ProfileContext(source: "reaction")).profilePresentationHost() }
     }
 }
 
@@ -68,7 +68,7 @@ private struct PostHeader: View {
         HStack(spacing: 10) {
             CircleAvatar(user: post.author)
             VStack(alignment: .leading, spacing: 2) {
-                Text(post.author.name).font(.headline).lineLimit(1)
+                Text(post.author.name).profileEntry(post.author.id, name: post.author.name, source: "social").font(.headline).lineLimit(1)
                 Group {
                     if fullDate { Text(post.createdAt.formatted(date: .abbreviated, time: .shortened)) }
                     else { PostTimestamp(date: post.createdAt) }
@@ -138,7 +138,7 @@ struct PostLikesView: View {
                         if loading { ProgressView() }
                         else if let error { Text(error).foregroundStyle(theme.destructive) }
                         else if users.isEmpty { Text("No likes yet") }
-                        ForEach(users) { user in HStack { CircleAvatar(user: user); Text(user.name); Spacer() }.padding().circleSurface() }
+                        ForEach(users) { user in HStack { CircleAvatar(user: user); Text(user.name).profileEntry(user.id, name: user.name, source: "reaction"); Spacer() }.padding().circleSurface() }
                     }.padding(20)
                 }
             }.navigationTitle("Likes").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }

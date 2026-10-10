@@ -14,6 +14,7 @@ public final class ChatStore {
     public var connectionState: WebSocketActor.ConnectionState = .disconnected
     public var pingLatencyMs: Int = 0
     public var accountRevision = 0
+    public var replyDraft: ChatMessage?
     public var memberProfiles: [String: User] = [:]
     public func onlineCount(in room: ChatRoom) -> Int {
         guard case .connected = connectionState else { return 0 }
@@ -69,6 +70,7 @@ public final class ChatStore {
         connectionState = .disconnected
     }
     public func reset() {
+        replyDraft = nil
         stop(); memberProfiles = [:]; Task { await WebRTCManager.shared.hangup() }; rooms = []; activeRoom = nil; messagesByRoomId = [:]; typingUsersByRoomId = [:]; presenceByUserId = [:]
         typingResetTasks.values.forEach { $0.cancel() }; typingResetTasks = [:]
     }
@@ -207,6 +209,8 @@ public final class ChatStore {
             }
             AppLogger.shared.warn(.network, reason)
         case .accountUpdated:
+            ProfileRepository.shared.reset()
+            presenceByUserId = [:]
             Task {
                 let auth = AuthSessionManager.shared
                 if let url = auth.savedServerURL { _ = await auth.validateSavedSession(serverURL: url); configure(circles: auth.circles) }
@@ -224,7 +228,7 @@ public final class ChatStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
-        let message = ChatMessage(
+        var message = ChatMessage(
             roomId: room.id,
             senderId: currentUserId,
             senderName: currentUserName,
@@ -235,6 +239,7 @@ public final class ChatStore {
             isFromCurrentUser: true
         )
         
+        if replyDraft?.roomId == room.id { message.replyToId = replyDraft?.id; replyDraft = nil }
         insertMessage(message)
         HapticFeedback.rigid()
         
@@ -252,7 +257,7 @@ public final class ChatStore {
     
     /// Sends an attachment message.
     public func sendMediaMessage(_ attachment: MediaAttachment, in room: ChatRoom, currentUserId: String, currentUserName: String) {
-        let message = ChatMessage(
+        var message = ChatMessage(
             roomId: room.id,
             senderId: currentUserId,
             senderName: currentUserName,
@@ -263,6 +268,7 @@ public final class ChatStore {
             isFromCurrentUser: true
         )
         
+        if replyDraft?.roomId == room.id { message.replyToId = replyDraft?.id; replyDraft = nil }
         insertMessage(message)
         HapticFeedback.rigid()
         

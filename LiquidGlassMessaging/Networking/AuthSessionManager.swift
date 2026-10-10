@@ -141,6 +141,7 @@ public final class AuthSessionManager {
         privateMediaFiles.insert(file); return file
     }
     public func discardSession() {
+        ProfileRepository.shared.reset(); ProfilePresentation.shared.reset()
         for file in privateMediaFiles { try? FileManager.default.removeItem(at: file) }
         privateMediaFiles = []
         generation += 1; currentSession = nil; savedServerURL = nil; circles = []; isAuthenticated = false
