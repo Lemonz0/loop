@@ -55,11 +55,11 @@ struct PostDetailView: View {
     private var header: some View {
         GlassEffectContainer(spacing: 14) {
             HStack {
-                CircleIconButton(symbol: "chevron.left", label: "Back to Home") { dismiss() }
+                CircleIconButton(symbol: "chevron.left", label: "Back to Home", compact: true) { dismiss() }
                 Spacer()
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }.overlay { Text("Post").font(.title2.bold()).accessibilityAddTraits(.isHeader) }
-        }.padding(.horizontal, 20).padding(.vertical, 10)
+        }.padding(.horizontal, 20).padding(.vertical, 6)
     }
 
     private func authorHeader(_ post: Post) -> some View {
@@ -75,11 +75,12 @@ struct PostDetailView: View {
     }
 
     private func actions(_ post: Post, comment: @escaping () -> Void) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Button { Task { await model.like(post) } } label: {
                 Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                    .font(.title3).frame(width: 44, height: 44)
+                    .font(.body).frame(width: 24, height: 24)
             }.buttonStyle(.glass).buttonBorderShape(.circle)
+                .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                 .disabled(model.isPending(postID))
                 .accessibilityLabel("\(post.isLiked ? "Unlike" : "Like") post, \(post.likes) likes")
                 .highPriorityGesture(LongPressGesture().onEnded { _ in showLikes = true },
@@ -87,13 +88,14 @@ struct PostDetailView: View {
                 .accessibilityAction(named: "Show likes") {
                     if post.author.id == model.currentUserID { showLikes = true }
                 }
-            CircleIconButton(symbol: "bubble.right", label: "Add a comment", action: comment)
+            CircleIconButton(symbol: "bubble.right", label: "Add a comment", compact: true, action: comment)
             Button { Task { await prepareShare(post) } } label: {
                 Group {
                     if preparingShare { ProgressView() }
-                    else { Image(systemName: "square.and.arrow.up").font(.title3) }
-                }.frame(width: 44, height: 44)
+                    else { Image(systemName: "square.and.arrow.up").font(.body) }
+                }.frame(width: 24, height: 24)
             }.buttonStyle(.glass).buttonBorderShape(.circle)
+                .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                 .disabled(preparingShare || post.media.isEmpty)
                 .accessibilityLabel("Share post photo")
             Spacer(minLength: 0)
@@ -140,19 +142,20 @@ struct PostDetailView: View {
             HStack(alignment: .bottom, spacing: 12) {
                 TextField("Add a comment", text: $text, axis: .vertical)
                     .font(.body).lineLimit(1...4).focused($commentFocused)
-                    .frame(minHeight: 44).padding(.leading, 8)
+                    .frame(minHeight: 36).padding(.leading, 4)
                     .accessibilityLabel("Add a comment")
                 Button {
                     let submitted = text
                     text = ""
                     Task { if !(await model.comment(post, text: submitted)), text.isEmpty { text = submitted } }
                 } label: {
-                    Image(systemName: "arrow.up").font(.title3.weight(.semibold))
-                        .frame(width: 44, height: 44)
+                    Image(systemName: "arrow.up").font(.body.weight(.semibold))
+                        .frame(width: 24, height: 24)
                 }.buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                    .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                     .accessibilityLabel("Send comment")
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 2000 || model.isPending(postID))
-            }.padding(8).glassEffect(.regular.interactive(), in: Capsule())
+            }.padding(4).glassEffect(.regular.interactive(), in: Capsule())
         }.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 8)
     }
 

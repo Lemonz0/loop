@@ -91,14 +91,18 @@ struct CircleMediaView: View {
 struct CircleIconButton: View {
     let symbol: String
     let label: String
+    var compact = false
     var action: () -> Void
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.body.weight(.semibold))
-                .frame(width: 44, height: 44)
+                .frame(width: compact ? 24 : 44, height: compact ? 24 : 44)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
+        .controlSize(compact ? .small : .regular)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
         .accessibilityLabel(label)
     }
 }
