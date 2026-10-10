@@ -83,7 +83,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       const chatAction = /^\/api\/chats\/([^/]+)\/messages\/([^/]+)\/reaction$/.exec(url.pathname);
       if (chatAction && req.method === 'POST') { const body = await readJSON(req); hub.react(user.id, chatAction[1], chatAction[2], body.emoji); json(res, 200, { success: true }); return; }
       const memberRoute = /^\/api\/circles\/([^/]+)\/members$/.exec(url.pathname);
-      if (memberRoute && req.method === 'GET') { json(res, 200, { users: auth.members(user.id, memberRoute[1]) }); return; }
+      if (memberRoute && req.method === 'GET') { json(res, 200, { users: auth.members(user.id, memberRoute[1]).map(member => profiles.directoryUser(user.id, member.id)) }); return; }
       if (url.pathname === '/api/auth/me'  && req.method === 'GET') { json(res, 200, { user, circles: auth.circlesFor(user.id) }); return; }
       if (url.pathname === '/api/auth/profile' && req.method === 'POST') { const profile = auth.updateProfile(user.id, await readJSON(req)); hub.notifyAccountChange(user.id); json(res, 200, { user: profile }); return; }
       const renameRoute = /^\/api\/circles\/([^/]+)\/rename$/.exec(url.pathname);

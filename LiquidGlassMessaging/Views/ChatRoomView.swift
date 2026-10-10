@@ -163,6 +163,12 @@ public struct ChatRoomView: View {
     private func startCall(video: Bool) {
         Task { await callManager.startCall(roomId: room.id, roomName: room.name, isVideo: video) }
     }
+    private var headerStatus: String {
+        if room.isGroup { return "\(chatStore.onlineCount(in: room)) online" }
+        guard let peerID = room.participantIds.first(where: { $0 != AuthSessionManager.shared.currentSession?.user.id }),
+              let presence = chatStore.presenceByUserId[peerID], presence.isOnline || presence.lastSeen.timeIntervalSince1970 > 0 else { return "Private conversation" }
+        return presence.isOnline ? "Online" : "Last seen " + presence.lastSeen.formatted(.relative(presentation: .named))
+    }
     // MARK: - Header
 
     // The native safeAreaBar owns the progressive top-edge blur/fade. No extra platter.
@@ -190,11 +196,12 @@ public struct ChatRoomView: View {
                     .lineLimit(1).truncationMode(.tail)
 
                 HStack(spacing: 5) {
-                    Circle()
+                    if headerStatus == "Online" || (room.isGroup && chatStore.onlineCount(in: room) > 0) { Circle()
                         .fill(theme.success)
                         .frame(width: 7, height: 7)
+                    }
 
-                    Text(room.isGroup ? "\(chatStore.onlineCount(in: room)) online" : (room.participantIds.contains(where: { $0 != AuthSessionManager.shared.currentSession?.user.id && chatStore.presenceByUserId[$0]?.isOnline == true }) ? "Online" : "Recently")).lineLimit(1)
+                    Text(headerStatus).lineLimit(1)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(theme.secondaryText)
                 }

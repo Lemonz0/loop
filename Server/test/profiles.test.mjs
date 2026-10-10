@@ -42,11 +42,13 @@ test('profile API enforces privacy, contacts, blocking, safe links, and viewer-o
   await f.request('/api/profiles/settings', f.friend, details({ private: true, presence: 'nobody' }));
   card = (await f.request(`/api/profiles/${id}`, f.owner)).data;
   assert.equal(card.state, 'private'); assert.equal(card.user.username, ''); assert.equal(card.bio, undefined); assert.equal(card.timeZone, undefined); assert.equal(card.presence, undefined); assert.deepEqual(card.links, []);
+  assert.equal((await f.request('/api/circles/circle_main/members', f.owner)).data.users.find(u => u.id === id).username, undefined);
   assert.equal((await f.request('/api/chats/direct', f.owner, { userId: id })).status, 403);
   await f.request(`/api/profiles/${id}/actions`, f.owner, { action: 'request' });
   assert.equal((await f.request('/api/profiles/requests', f.friend)).data.users[0].id, f.owner.user.id);
   await f.request(`/api/profiles/${f.owner.user.id}/actions`, f.friend, { action: 'contact', value: true });
   assert.equal((await f.request(`/api/profiles/${id}`, f.owner)).data.state, 'active');
+  assert.equal((await f.request('/api/circles/circle_main/members', f.owner)).data.users.find(u => u.id === id).username, 'friend');
   assert.equal((await f.request('/api/chats/direct', f.owner, { userId: id })).status, 200);
   await f.request(`/api/profiles/${id}/actions`, f.owner, { action: 'block', value: true });
   card = (await f.request(`/api/profiles/${id}`, f.owner)).data;

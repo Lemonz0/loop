@@ -230,7 +230,7 @@ export class AuthStore {
   socialUser(id: string) {
     const account = this.state.accounts.find(a => a.user.id === id);
     if (!account) throw new ApiError(404, 'User not found');
-    return { id, username: account.user.username, name: account.user.displayName, avatarURL: account.user.avatarURL, allowsTrollPosts: account.user.allowsTrollPosts ?? true };
+    return { id, name: account.user.displayName, avatarURL: account.user.avatarURL, allowsTrollPosts: account.user.allowsTrollPosts ?? true };
   }
   consentVersion(id: string) { return this.state.accounts.find(a => a.user.id === id)?.consentVersion ?? 0; }
   setConsent(userId: string, allowed: boolean) {

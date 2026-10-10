@@ -67,6 +67,10 @@ export class ProfileStore {
   requestsFor(viewer: string) {
     return Object.entries(this.state.personal).filter(([target, entries]) => entries[viewer]?.requested && this.auth.shareCircle(viewer, target) && !this.blocked(viewer, target)).map(([target]) => this.auth.socialUser(target));
   }
+  directoryUser(viewer: string, target: string) {
+    const card = this.card(viewer, target);
+    return { ...this.auth.socialUser(target), username: card.state === 'active' ? card.user.username : undefined };
+  }
   action(viewer: string, target: string, input: Record<string, unknown>) {
     this.auth.profileIdentity(viewer, target);
     if (viewer === target) throw new ApiError(400, 'Use Edit profile for your own account');
