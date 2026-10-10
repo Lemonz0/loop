@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
+    @State private var spotifyConnection = SpotifyConnectionManager.shared
     @State private var settings = ProfileSettings()
     @State private var links = ""
     @State private var loaded = false
@@ -16,6 +17,7 @@ struct ProfileEditorView: View {
                     GlassEffectContainer(spacing: 14) {
                         VStack(spacing: 14) {
                             ProfileCard()
+                            SpotifySettingsView()
                             VStack(alignment: .leading, spacing: 14) {
                                 Text("About you").font(.headline)
                                 TextField("Bio", text: $settings.bio, axis: .vertical).lineLimit(3...8)
@@ -37,9 +39,9 @@ struct ProfileEditorView: View {
                 }
             }.navigationTitle("Edit profile")
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(saving) }
-                    ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(!loaded || saving || settings.bio.count > 2000 || settings.pronouns.count > 80 || settings.status.count > 140) }
-                }.interactiveDismissDisabled(saving).task { await load() }
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.disabled(saving || spotifyConnection.isConnecting) }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(!loaded || saving || spotifyConnection.isConnecting || settings.bio.count > 2000 || settings.pronouns.count > 80 || settings.status.count > 140) }
+                }.interactiveDismissDisabled(saving || spotifyConnection.isConnecting).task { await load() }
         }
     }
     private func load() async {

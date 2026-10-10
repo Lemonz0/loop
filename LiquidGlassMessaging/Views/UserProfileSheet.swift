@@ -38,6 +38,7 @@ struct UserProfileSheet: View {
                         if card.state != "deleted" { actions(card) }
                         if card.state == "active" {
                             if let group = card.group { groupSection(group) }
+                            if !isPreview { SpotifyPresenceView(userID: userID) }
                             about(card)
                             mutual(card)
                             if !card.isSelf {

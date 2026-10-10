@@ -60,6 +60,7 @@ targets:
       - path: LiquidGlassMessaging/Models/AuthModels.swift
       - path: LiquidGlassMessaging/Models/ChatModels.swift
       - path: LiquidGlassMessaging/Models/ProfileModels.swift
+      - path: LiquidGlassMessaging/Models/SpotifyModels.swift
       - path: LiquidGlassMessaging/Networking/AccountHTTPClient.swift
       - path: Tests
     settings:

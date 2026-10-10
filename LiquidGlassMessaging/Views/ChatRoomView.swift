@@ -194,19 +194,18 @@ public struct ChatRoomView: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
+                    .profileEntry(room.participantIds.first { $0 != AuthSessionManager.shared.currentSession?.user.id } ?? "", name: room.name, enabled: !room.isGroup)
 
-                HStack(spacing: 5) {
-                    if headerStatus == "Online" || (room.isGroup && chatStore.onlineCount(in: room) > 0) { Circle()
-                        .fill(theme.success)
-                        .frame(width: 7, height: 7)
-                    }
-
-                    Text(headerStatus).lineLimit(1)
+                if room.isGroup {
+                    HStack(spacing: 5) {
+                        if chatStore.onlineCount(in: room) > 0 { Circle().fill(theme.success).frame(width: 7, height: 7) }
+                        Text(headerStatus).lineLimit(1).foregroundStyle(theme.secondaryText)
+                    }.font(.system(size: 12, weight: .medium, design: .rounded))
+                } else if let peerID = room.participantIds.first(where: { $0 != AuthSessionManager.shared.currentSession?.user.id }) {
+                    SpotifyPresenceView(userID: peerID, compact: true, fallback: headerStatus, showsOnlineDot: headerStatus == "Online")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(theme.secondaryText)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-                .profileEntry(room.participantIds.first { $0 != AuthSessionManager.shared.currentSession?.user.id } ?? "", name: room.name, enabled: !room.isGroup)
                 .onTapGesture { if room.isGroup { showsMembers = true } }
 
             GlassEffectContainer(spacing: 0) {

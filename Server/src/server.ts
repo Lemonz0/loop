@@ -8,6 +8,7 @@ import { SocialStore } from './social.js';
 import { uploadSocialPhoto } from './socialMedia.js';
 import { AuthStore, ApiError } from './auth.js';
 import { ProfileStore } from './profiles.js';
+import { SpotifyStore, SpotifyOptions } from './spotify.js';
 import { serverLogger } from './logger.js';
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
@@ -39,16 +40,23 @@ function readJSON(req: http.IncomingMessage): Promise<Record<string, unknown>> {
     req.on('error', reject);
   });
 }
-export function createLoopServer(options: { dataDirectory?: string; bootstrapKey?: string; now?: () => number } = {}) {
+export function createLoopServer(options: { dataDirectory?: string; bootstrapKey?: string; now?: () => number; spotify?: SpotifyOptions } = {}) {
   const auth = new AuthStore(options.dataDirectory ?? path.resolve(process.cwd(), 'data'), options.bootstrapKey ?? process.env.INVITE_KEY, options.now);
   const uploadsDirectory = options.dataDirectory ? path.join(options.dataDirectory, 'uploads') : undefined;
   const social = new SocialStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'), uploadsDirectory ?? path.resolve(process.cwd(), 'uploads'), options.now);
   const profiles = new ProfileStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'));
+  const spotify = new SpotifyStore(auth, profiles, options.dataDirectory ?? path.resolve(process.cwd(), 'data'), options.spotify ?? {
+    clientId: process.env.SPOTIFY_CLIENT_ID, redirectURI: process.env.SPOTIFY_REDIRECT_URI, encryptionKey: process.env.SPOTIFY_TOKEN_KEY
+  }, options.now);
   const attempts = new Map<string, { count: number; expiresAt: number }>();
   const server = http.createServer((req, res) => {
     void (async () => {
       const url = new URL(req.url ?? '/', 'http://localhost');
       if (url.pathname === '/health' && req.method === 'GET') { json(res, 200, { status: 'ok', service: 'Loop Hub' }); return; }
+      if (url.pathname === '/api/spotify/callback' && req.method === 'GET') {
+        const result = await spotify.callback(url.searchParams); hub.notifyAccountChange(result.userId);
+        res.writeHead(302, { Location: result.redirect, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); return;
+      }
       if (req.method === 'POST' && ['/api/auth/invite', '/api/auth/login'].includes(url.pathname)) {
         const now = Date.now(), ip = req.socket.remoteAddress ?? 'unknown';
         for (const [key, value] of attempts) if (value.expiresAt <= now) attempts.delete(key);
@@ -61,6 +69,13 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
         json(res, 200, { success: true, session }); return;
       }
       const token = bearer(req), user = auth.authenticate(token);
+      if (url.pathname === '/api/spotify/settings' && req.method === 'GET') { json(res, 200, spotify.settings(user.id)); return; }
+      if (url.pathname === '/api/spotify/connect' && req.method === 'POST') { json(res, 200, spotify.begin(user.id, token)); return; }
+      if (url.pathname === '/api/spotify/cancel' && req.method === 'POST') { spotify.cancel(user.id); json(res, 200, { success: true }); return; }
+      if (url.pathname === '/api/spotify/disconnect' && req.method === 'POST') { const result = spotify.disconnect(user.id); hub.notifyAccountChange(user.id); json(res, 200, result); return; }
+      if (url.pathname === '/api/spotify/sharing' && req.method === 'POST') { const body = await readJSON(req); const result = spotify.setSharing(user.id, body.enabled); hub.notifyAccountChange(user.id); json(res, 200, result); return; }
+      const spotifyPresence = /^\/api\/spotify\/users\/([^/]+)$/.exec(url.pathname);
+      if (spotifyPresence && req.method === 'GET') { json(res, 200, await spotify.presence(user.id, spotifyPresence[1])); return; }
       if (url.pathname === '/api/calls/ice' && req.method === 'GET') {
         const servers: { urls: string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302'] }];
         if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) servers.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USERNAME, credential: process.env.TURN_PASSWORD });
@@ -88,7 +103,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       if (url.pathname === '/api/auth/profile' && req.method === 'POST') { const profile = auth.updateProfile(user.id, await readJSON(req)); hub.notifyAccountChange(user.id); json(res, 200, { user: profile }); return; }
       const renameRoute = /^\/api\/circles\/([^/]+)\/rename$/.exec(url.pathname);
       if (renameRoute && req.method === 'POST') { const body = await readJSON(req); const circle = auth.renameCircle(user.id, renameRoute[1], body.name); hub.notifyCircleChange(circle.roomId); json(res, 200, { circle }); return; }
-      if (url.pathname === '/api/auth/logout' && req.method === 'POST') { auth.logout(token); json(res, 200, { success: true }); return; }
+      if (url.pathname === '/api/auth/logout' && req.method === 'POST') { spotify.cancel(user.id); auth.logout(token); json(res, 200, { success: true }); return; }
       if (url.pathname === '/api/chats' && req.method === 'GET') { json(res, 200, { rooms: auth.chatRooms(user.id) }); return; }
       if (url.pathname === '/api/chats/direct' && req.method === 'POST') { const body = await readJSON(req); if (typeof body.userId !== 'string' || !profiles.canContact(user.id, body.userId)) throw new ApiError(403, 'This account cannot be contacted'); const room = auth.directRoom(user.id, body.userId); hub.synchronizeRooms(); json(res, 200, { room }); return; }
       if (url.pathname === '/api/circles' && req.method === 'GET') { json(res, 200, { circles: auth.circlesFor(user.id) }); return; }
@@ -157,7 +172,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
     if (new URL(request.url ?? '/', 'http://localhost').pathname !== '/ws') { socket.destroy(); return; }
     wss.handleUpgrade(request, socket, head, ws => { wss.emit('connection', ws, request); });
   });
-  return { server, wss, auth, social, profiles };
+  return { server, wss, auth, social, profiles, spotify };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { server } = createLoopServer();

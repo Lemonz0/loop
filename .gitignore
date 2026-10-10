@@ -61,3 +61,5 @@ Server/data/themes.json
 Server/data/profiles.json
 Server/data/profiles.json.*.tmp
 Server/data/calls.json
+Server/data/spotify.json
+Server/data/spotify.json.*.tmp
