@@ -40,7 +40,7 @@ struct PostDetailView: View {
                             } else {
                                 ContentUnavailableView("Post unavailable", systemImage: "photo")
                             }
-                        }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 24)
+                        }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 20)
                     }
                 }.scrollDismissesKeyboard(.interactively)
             }
@@ -100,9 +100,9 @@ struct PostDetailView: View {
                 Group {
                     if preparingShare { ProgressView() }
                     else { Image(systemName: "square.and.arrow.up").font(.body) }
-                }.frame(width: 28, height: 28)
+                }.frame(width: 30, height: 26)
             }.buttonStyle(.glass).buttonBorderShape(.circle)
-                .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
+                .controlSize(.small).frame(width: 46, height: 40).contentShape(Rectangle())
                 .disabled(preparingShare || post.media.isEmpty)
                 .accessibilityLabel("Share post photo")
             Spacer(minLength: 0)
@@ -160,7 +160,7 @@ struct PostDetailView: View {
                         .frame(width: 34, height: 28)
                 }.buttonStyle(.glassProminent).buttonBorderShape(.capsule)
                     .controlSize(.small).frame(width: 50, height: 44).contentShape(Rectangle())
-                    .offset(x: -3)
+                    .offset(x: -4)
                     .accessibilityLabel("Send comment")
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 2000 || model.isPending(postID))
             }.padding(.horizontal, 6).padding(.vertical, 3).glassEffect(.regular.interactive(), in: Capsule())
