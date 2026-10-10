@@ -8,6 +8,7 @@ struct PostDetailView: View {
     @Bindable var model: CircleViewModel
     @State private var text = ""
     @State private var showLikes = false
+    @State private var selectedPhoto: PostPhotoPresentation?
     @State private var share: PostShare?
     @State private var preparingShare = false
     @State private var shareError: String?
@@ -24,7 +25,10 @@ struct PostDetailView: View {
                             if let post {
                                 authorHeader(post)
                                 GeometryReader { geometry in
-                                    PostPhotos(post: post, height: geometry.size.width, radius: 28)
+                                    PostPhotos(post: post, height: geometry.size.width, radius: 28) { index in
+                                        commentFocused = false
+                                        selectedPhoto = PostPhotoPresentation(media: post.media, initialIndex: index, authorName: post.author.name)
+                                    }
                                 }.aspectRatio(1, contentMode: .fit)
                                 actions(post) {
                                     commentFocused = true
@@ -46,6 +50,9 @@ struct PostDetailView: View {
             if let post { composer(post) }
         }
         .sheet(isPresented: $showLikes) { PostLikesView(postID: postID, model: model) }
+        .fullScreenCover(item: $selectedPhoto) { selection in
+            PostPhotoViewer(selection: selection)
+        }
         .popover(item: $share) { item in PostShareSheet(file: item.file, caption: item.caption) }
         .alert("Couldn’t share photo", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
             Button("OK") { shareError = nil }
@@ -59,7 +66,7 @@ struct PostDetailView: View {
                 Spacer()
                 Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }.overlay { Text("Post").font(.title2.bold()).accessibilityAddTraits(.isHeader) }
-        }.padding(.horizontal, 20).padding(.vertical, 6)
+        }.padding(.horizontal, 20).padding(.vertical, 8)
     }
 
     private func authorHeader(_ post: Post) -> some View {
@@ -75,10 +82,10 @@ struct PostDetailView: View {
     }
 
     private func actions(_ post: Post, comment: @escaping () -> Void) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button { Task { await model.like(post) } } label: {
                 Image(systemName: post.isLiked ? "heart.fill" : "heart")
-                    .font(.body).frame(width: 24, height: 24)
+                    .font(.body).frame(width: 28, height: 28)
             }.buttonStyle(.glass).buttonBorderShape(.circle)
                 .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                 .disabled(model.isPending(postID))
@@ -93,7 +100,7 @@ struct PostDetailView: View {
                 Group {
                     if preparingShare { ProgressView() }
                     else { Image(systemName: "square.and.arrow.up").font(.body) }
-                }.frame(width: 24, height: 24)
+                }.frame(width: 28, height: 28)
             }.buttonStyle(.glass).buttonBorderShape(.circle)
                 .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                 .disabled(preparingShare || post.media.isEmpty)
@@ -150,12 +157,12 @@ struct PostDetailView: View {
                     Task { if !(await model.comment(post, text: submitted)), text.isEmpty { text = submitted } }
                 } label: {
                     Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                        .frame(width: 24, height: 24)
+                        .frame(width: 28, height: 28)
                 }.buttonStyle(.glassProminent).buttonBorderShape(.circle)
                     .controlSize(.small).frame(width: 44, height: 44).contentShape(Rectangle())
                     .accessibilityLabel("Send comment")
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 2000 || model.isPending(postID))
-            }.padding(4).glassEffect(.regular.interactive(), in: Capsule())
+            }.padding(6).glassEffect(.regular.interactive(), in: Capsule())
         }.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 8)
     }
 

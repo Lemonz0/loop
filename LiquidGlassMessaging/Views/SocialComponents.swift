@@ -51,12 +51,13 @@ struct CircleMediaView: View {
     @Environment(\.appTheme) private var theme
     let media: CircleMedia
     var placeholderSymbol = "photo"
+    var contentMode: ContentMode = .fill
     var body: some View {
         GeometryReader { geometry in
             Group {
                 #if canImport(UIKit)
                 if let data = media.imageData, let image = UIImage(data: data) {
-                    Image(uiImage: image).resizable().scaledToFill()
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
                 } else {
                     remoteImage
                 }
@@ -71,11 +72,11 @@ struct CircleMediaView: View {
     private var remoteImage: some View {
         Group {
             if let url = media.url, url.host == nil || url.host == AuthSessionManager.shared.savedServerURL?.host {
-                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol)
+                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol, contentMode: contentMode)
             } else {
                 AsyncImage(url: media.url) { phase in
                     switch phase {
-                    case .success(let image): image.resizable().scaledToFill()
+                    case .success(let image): image.resizable().aspectRatio(contentMode: contentMode)
                     case .failure: placeholder.overlay { Image(systemName: placeholderSymbol).font(.title).foregroundStyle(.primary) }
                     default: placeholder.overlay { ProgressView().tint(theme.accent) }
                     }
@@ -96,7 +97,7 @@ struct CircleIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.body.weight(.semibold))
-                .frame(width: compact ? 24 : 44, height: compact ? 24 : 44)
+                .frame(width: compact ? 28 : 44, height: compact ? 28 : 44)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
@@ -127,12 +128,13 @@ struct CircleErrorAlert: ViewModifier {
 private struct PrivateSocialImage: View {
     let url: URL
     var placeholderSymbol = "photo.badge.exclamationmark"
+    var contentMode: ContentMode = .fill
     @State private var file: URL?
     @State private var failed = false
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let file, let image = UIImage(contentsOfFile: file.path) { Image(uiImage: image).resizable().scaledToFill() }
+            if let file, let image = UIImage(contentsOfFile: file.path) { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
             else if failed { Image(systemName: placeholderSymbol).foregroundStyle(.primary) }
             else { ProgressView() }
             #else

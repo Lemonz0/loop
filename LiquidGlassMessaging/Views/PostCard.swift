@@ -82,15 +82,25 @@ struct PostPhotos: View {
     let post: Post
     var height: CGFloat = 290
     var radius: CGFloat = 20
+    var onPhotoTap: ((Int) -> Void)?
     var body: some View {
         Group {
             if post.media.count > 1 {
                 TabView {
-                    ForEach(Array(post.media.enumerated()), id: \.offset) { _, media in CircleMediaView(media: media) }
+                    ForEach(Array(post.media.enumerated()), id: \.offset) { index, media in photo(media, index: index) }
                 }.tabViewStyle(.page(indexDisplayMode: .always))
-            } else if let media = post.media.first { CircleMediaView(media: media) }
+            } else if let media = post.media.first { photo(media, index: 0) }
         }.frame(height: height).clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .accessibilityLabel("Photo by \(post.author.name)")
+    }
+    @ViewBuilder private func photo(_ media: CircleMedia, index: Int) -> some View {
+        if let onPhotoTap {
+            CircleMediaView(media: media).contentShape(Rectangle())
+                .onTapGesture { onPhotoTap(index) }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Open photo \(index + 1) by \(post.author.name) full screen")
+                .accessibilityAction { onPhotoTap(index) }
+        } else { CircleMediaView(media: media) }
     }
 }
 private struct EditPostView: View {
