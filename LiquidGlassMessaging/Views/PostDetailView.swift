@@ -4,9 +4,11 @@ import UIKit
 struct PostDetailView: View {
     @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let postID: UUID
     @Bindable var model: CircleViewModel
     @State private var text = ""
+    @State private var sheetDetent: PresentationDetent = .medium
     @State private var showLikes = false
     @State private var selectedPhoto: PostPhotoPresentation?
     @State private var share: PostShare?
@@ -16,35 +18,43 @@ struct PostDetailView: View {
     private var post: Post? { model.snapshot.posts.first { $0.id == postID } }
 
     var body: some View {
-        ZStack {
-            AmbientGlowBackground()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    GlassEffectContainer(spacing: 14) {
-                        VStack(alignment: .leading, spacing: 22) {
-                            if let post {
-                                authorHeader(post)
-                                GeometryReader { geometry in
-                                    PostPhotos(post: post, height: geometry.size.width, radius: 28) { index in
-                                        commentFocused = false
-                                        selectedPhoto = PostPhotoPresentation(media: post.media, initialIndex: index, authorName: post.author.name)
-                                    }
-                                }.aspectRatio(1, contentMode: .fit)
-                                actions(post) {
-                                    commentFocused = true
-                                    proxy.scrollTo("comments", anchor: .top)
+        ScrollViewReader { proxy in
+            ScrollView {
+                GlassEffectContainer(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if let post {
+                            authorHeader(post)
+                            GeometryReader { geometry in
+                                PostPhotos(post: post, height: geometry.size.width, radius: 28) { index in
+                                    commentFocused = false
+                                    selectedPhoto = PostPhotoPresentation(media: post.media, initialIndex: index, authorName: post.author.name)
                                 }
-                                VStack(alignment: .leading, spacing: 4) { Text(post.author.name).bold().profileEntry(post.author.id, name: post.author.name, source: "post_detail"); ProfileMentionText(text: post.caption, users: Array(AppEnvironment.shared.chatStore.memberProfiles.values)) }
-                                    .font(.body).textSelection(.enabled)
-                                comments(post).id("comments")
-                            } else {
-                                ContentUnavailableView("Post unavailable", systemImage: "photo")
+                            }.aspectRatio(1, contentMode: .fit)
+                            actions(post) {
+                                sheetDetent = .large
+                                commentFocused = true
+                                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { proxy.scrollTo("comments", anchor: .top) }
                             }
-                        }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 20)
-                    }
-                }.scrollDismissesKeyboard(.interactively)
-            }
+                            if !post.caption.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(post.author.name).bold().profileEntry(post.author.id, name: post.author.name, source: "post_detail")
+                                    ProfileMentionText(text: post.caption, users: Array(AppEnvironment.shared.chatStore.memberProfiles.values))
+                                }.font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(16).circleSurface()
+                            }
+                            comments(post).id("comments")
+                        } else {
+                            ContentUnavailableView("Post unavailable", systemImage: "photo")
+                        }
+                    }.padding(20)
+                }
+            }.scrollDismissesKeyboard(.interactively)
         }
+        // Let the system sheet supply its adaptive glass, as it does for user profiles.
+        .background { AmbientGlowBackground().opacity(0.08).allowsHitTesting(false) }
+        .floatingGlassSheet(selection: $sheetDetent)
+        .environment(\.profileContext, ProfileContext(source: "post_detail"))
+        .onChange(of: commentFocused) { _, focused in if focused { sheetDetent = .large } }
+        .onDisappear { commentFocused = false }
         .safeAreaInset(edge: .top, spacing: 0) { header }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let post { composer(post) }
@@ -62,10 +72,10 @@ struct PostDetailView: View {
     private var header: some View {
         GlassEffectContainer(spacing: 14) {
             HStack {
-                CircleIconButton(symbol: "chevron.left", label: "Back to Home", compact: true) { dismiss() }
+                Text("Post").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Spacer()
-                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
-            }.overlay { Text("Post").font(.title2.bold()).accessibilityAddTraits(.isHeader) }
+                CircleIconButton(symbol: "xmark", label: "Close post", compact: true) { commentFocused = false; dismiss() }
+            }
         }.padding(.horizontal, 20).padding(.vertical, 8)
     }
 
@@ -110,7 +120,7 @@ struct PostDetailView: View {
     }
 
     private func comments(_ post: Post) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Comments").font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Text("\(post.comments.count)").font(.title3).foregroundStyle(theme.secondaryText)

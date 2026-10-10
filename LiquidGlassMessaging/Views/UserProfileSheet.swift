@@ -61,7 +61,6 @@ struct UserProfileSheet: View {
         }
         // Keep the native sheet's adaptive glass. A decorative ambient layer must not cover it.
         .background { AmbientGlowBackground().opacity(0.08).allowsHitTesting(false) }
-        .background { ProfileBackdropDismiss().frame(width: 0, height: 0).allowsHitTesting(false) }
         .task { if !isPreview { await refresh() } }
         .onChange(of: store.accountRevision) { _, _ in if !isPreview { Task { await refresh() } } }
         .fullScreenCover(isPresented: $showAvatar) { if let card { ProfileAvatarViewer(user: card.avatarUser) } }

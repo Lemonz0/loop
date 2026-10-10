@@ -62,9 +62,7 @@ private struct ProfileHostModifier: ViewModifier {
                     if reduceMotion { UserProfileSheet(userID: request.userID, context: request.context) }
                     else { UserProfileSheet(userID: request.userID, context: request.context).navigationTransition(.zoom(sourceID: request.sourceID, in: request.namespace)) }
                 }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(40)
+                .floatingGlassSheet()
             }
             .onChange(of: presentation.navigationRevision) { _, _ in if dismissParentOnNavigate { dismissParent() } }
     }

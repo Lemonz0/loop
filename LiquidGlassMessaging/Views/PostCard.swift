@@ -54,7 +54,8 @@ struct PostCard: View {
                 Button("Delete post", role: .destructive) { Task { await model.delete(post) } }
                 Button("Cancel", role: .cancel) {}
             }
-            .fullScreenCover(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model).profilePresentationHost() }
+            .sheet(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model).profilePresentationHost() }
+            .onChange(of: showDetail) { _, presented in if presented { HapticFeedback.soft() } }
             .sheet(isPresented: $showEdit) { EditPostView(post: post, model: model) }
             .sheet(isPresented: $showLikes) { PostLikesView(postID: post.id, model: model).environment(\.profileContext, ProfileContext(source: "reaction")).profilePresentationHost() }
     }
