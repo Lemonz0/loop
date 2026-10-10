@@ -7,8 +7,10 @@ import AVFoundation
 @MainActor
 public struct ChatInputDockView: View {
     @Environment(\.appTheme) private var theme
-    @Environment(\.conversationDockHeight) private var dockHeight
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @FocusState private var textFocused: Bool
     @Binding public var text: String
     public let room: ChatRoom
     public let onSendText: (String) -> Void
@@ -22,7 +24,12 @@ public struct ChatInputDockView: View {
     @State private var draftVoice: URL?
     @State private var draftDuration = 0.0
     @Environment(\.scenePhase) private var scenePhase
-    private var isVoiceRecording: Bool { recorder.isRecording }
+    @State private var isSendingVoice = false
+    private var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var hasVoice: Bool { recorder.isRecording || draftVoice != nil || isSendingVoice }
+    private var primarySymbol: String { hasVoice || hasText ? "arrow.up" : "mic.fill" }
+    private var composerPhase: String { uploadManager.isProcessing && !hasVoice ? "media" : isSendingVoice ? "sending" : recorder.isRecording ? "recording" : draftVoice != nil ? "draft" : hasText ? "text" : "microphone" }
+    private var primaryLabel: String { isSendingVoice ? "Sending voice message" : recorder.isRecording ? "Stop recording and send voice message" : draftVoice != nil ? "Retry sending voice message" : hasText ? "Send message" : "Record voice message" }
     @State private var uploadManager = MediaUploadManager.shared
 
     public init(
@@ -40,132 +47,77 @@ public struct ChatInputDockView: View {
     }
 
     public var body: some View {
-        let mediaPickerAccent = theme.accent
-        let attachmentHeight = dockHeight
-        return VStack(spacing: 8) {
-            if recorder.isRecording {
-                HStack {
-                    Text("Recording \(Int(recorder.duration))s").monospacedDigit()
-                    Spacer()
-                    Button("Cancel", role: .cancel) { recorder.cancel() }.buttonStyle(.glass)
-                    Button("Stop & send") { finishVoice() }.buttonStyle(.glassProminent)
-                }.padding(12).circleSurface(radius: 24).padding(.horizontal, 16)
-            } else if draftVoice != nil {
-                HStack {
-                    Text("Voice message ready")
-                    Button("Retry") { sendVoice() }.buttonStyle(.glassProminent)
-                    Button("Discard", role: .destructive) { discardVoice() }.buttonStyle(.glass)
-                }.padding(12).circleSurface(radius: 24).padding(.horizontal, 16)
-            }
-            // Media compression & upload status pill
-            if uploadManager.isProcessing {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .tint(theme.accent)
-                        .scaleEffect(0.8)
-
-                    Text(uploadManager.processingStatus)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(.primary)
-
-                    if uploadManager.uploadProgress > 0 {
-                        Text("\(Int(uploadManager.uploadProgress * 100))%")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(theme.accent)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .liquidGlassPill(specularIntensity: 0.5)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // Main Floating Input Capsule
+        VStack(spacing: 8) {
             GlassEffectContainer(spacing: 8) {
                 HStack(alignment: .center, spacing: 8) {
-                    // Media Picker Button (Photos, GIFs, HEIC, PNG, MOV, MP4)
-                    PhotosPicker(
-                        selection: $selectedPhotosItem,
-                        matching: .any(of: [.images, .videos, .livePhotos, .panoramas, .screenshots])
-                    ) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(mediaPickerAccent)
-                            .frame(width: attachmentHeight, height: attachmentHeight)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(reduceTransparency ? .regular.tint(theme.backgroundBase) : .regular.interactive(), in: Circle())
-                    .glassEffectID("attachment", in: dockNamespace)
-                    .accessibilityLabel("Attach a photo or video")
-                    .disabled(uploadManager.isProcessing || recorder.isRecording || recorder.requestingPermission)
-
-                    // Expandable Text Editor Area
-                    HStack(spacing: 4) {
-                        ZStack(alignment: .leading) {
-                        if text.isEmpty {
-                            Text("Message \(room.name)").lineLimit(1)
-                                .font(.system(size: 15))
-                                .foregroundStyle(theme.secondaryText)
-                                .padding(.leading, 20).padding(.trailing, 4)
-                                .allowsHitTesting(false)
-                        }
-
-                        TextField("", text: $text, axis: .vertical)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.primary)
-                            .textFieldStyle(.plain)
-                            .lineLimit(1...5).multilineTextAlignment(.leading)
-                            .padding(.leading, 20).padding(.trailing, 4)
-                            .padding(.vertical, 4)
-                            .frame(minHeight: dockHeight)
-                            .onChange(of: text) { _, newValue in
-                                onTypingChanged(!newValue.isEmpty)
+                    attachmentControl
+                    ComposerCapsule {
+                        Group {
+                            if hasVoice || uploadManager.isProcessing {
+                                HStack(spacing: 8) {
+                                    Image(systemName: !hasVoice ? "photo" : recorder.isRecording ? "waveform" : "waveform.circle")
+                                        .font(.body).foregroundStyle(theme.accent).accessibilityHidden(true)
+                                    Text(!hasVoice ? mediaStatus : isSendingVoice ? "Sending voice…" : recorder.isRecording ? "Recording \(voiceTime(recorder.duration))" : "Voice ready · \(voiceTime(draftDuration))")
+                                        .font(.subheadline.monospacedDigit()).foregroundStyle(.primary).lineLimit(1)
+                                }.frame(maxWidth: .infinity, minHeight: ComposerLayout.fieldHeight, alignment: .leading)
+                                    .padding(.leading, ComposerLayout.leadingInset)
+                                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                                    .accessibilityElement(children: .combine)
+                            } else {
+                                TextField("", text: $text,
+                                          prompt: Text("Message").foregroundStyle(theme.secondaryText), axis: .vertical)
+                                    .font(.body).foregroundStyle(.primary).textFieldStyle(.plain)
+                                    .lineLimit(1...4).multilineTextAlignment(.leading).focused($textFocused)
+                                    .frame(minHeight: ComposerLayout.fieldHeight).padding(.leading, ComposerLayout.leadingInset)
+                                    .onChange(of: text) { _, value in onTypingChanged(!value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                                    .accessibilityLabel("Message \(room.name)")
+                                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                             }
-                    }
-
-                    // Audio Voice Note or Send Action Button
-                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        // Voice Note Trigger
-                        Button {
-                            toggleVoiceRecording()
-                        } label: {
-                            Image(systemName: isVoiceRecording ? "waveform.circle.fill" : "mic.fill")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(isVoiceRecording ? theme.destructive : Color.primary)
-                                .frame(width: 44, height: 44)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(uploadManager.isProcessing || recorder.requestingPermission || draftVoice != nil)
-                        .accessibilityLabel(isVoiceRecording ? "Stop voice recording" : "Record voice message")
-                    } else {
-                        // Prominent Liquid Glass Send Button
-                        Button {
-                            submitText()
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.circle)
-                        .tint(theme.accent)
-                        .accessibilityLabel("Send message")
-                    }
-                    }.padding(.trailing, 8)
-                    .glassEffect(reduceTransparency ? .regular.tint(theme.backgroundBase) : .regular.interactive(), in: Capsule())
-                    .glassEffectID("message", in: dockNamespace)
-                }
-                .padding(.horizontal, 16)
+                        ComposerActionButton(symbol: primarySymbol, label: primaryLabel) { primaryAction() }
+                            .disabled(uploadManager.isProcessing || recorder.requestingPermission || isSendingVoice)
+                    }.glassEffectID("message", in: dockNamespace)
+                }.padding(.horizontal, 20)
             }
         }
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.8), value: composerPhase)
         .alert("Voice message", isPresented: Binding(get: { recorder.error != nil || uploadManager.lastError != nil }, set: { if !$0 { recorder.error = nil; uploadManager.lastError = nil } })) { Button("OK") { recorder.error = nil; uploadManager.lastError = nil } } message: { Text(recorder.error ?? uploadManager.lastError ?? "") }
-        .onDisappear { voiceStartTask?.cancel(); recorder.cancel(); if !uploadManager.isProcessing { discardVoice() } }
-        .onChange(of: scenePhase) { _, phase in if phase != .active { voiceStartTask?.cancel(); recorder.cancel() } }
+        .onDisappear { voiceStartTask?.cancel(); recorder.cancel(); if !isSendingVoice && !uploadManager.isProcessing { discardVoice() } }
+        .onChange(of: scenePhase) { _, phase in if phase == .background || (phase != .active && recorder.isRecording) { voiceStartTask?.cancel(); recorder.cancel() } }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in recorder.cancel() }
         .onChange(of: selectedPhotosItem) { _, newItem in
             guard let newItem else { return }
             handleSelectedMedia(newItem)
         }
+    }
+
+    private var attachmentControl: some View {
+        Group {
+            if hasVoice {
+                Button(role: .destructive) {
+                    voiceStartTask?.cancel(); recorder.cancel(); discardVoice(); HapticFeedback.soft()
+                } label: {
+                    Image(systemName: "xmark").font(.body.weight(.semibold)).foregroundStyle(theme.destructive)
+                        .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
+                }.accessibilityLabel(recorder.isRecording ? "Cancel voice recording" : "Discard voice message")
+                    .disabled(isSendingVoice)
+            } else {
+                PhotosPicker(selection: $selectedPhotosItem, matching: .any(of: [.images, .videos, .livePhotos, .panoramas, .screenshots])) {
+                    Image(systemName: "photo.on.rectangle.angled").font(.body.weight(.medium)).foregroundStyle(theme.accent)
+                        .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
+                }.accessibilityLabel("Attach a photo or video").disabled(uploadManager.isProcessing || recorder.requestingPermission)
+            }
+        }.buttonStyle(.plain)
+            .glassEffect((reduceTransparency || contrast == .increased) ? .regular.tint(theme.backgroundBase) : .regular.interactive(), in: Circle())
+            .glassEffectID("attachment", in: dockNamespace)
+    }
+    private var mediaStatus: String { uploadManager.processingStatus + (uploadManager.uploadProgress > 0 ? " · \(Int(uploadManager.uploadProgress * 100))%" : "") }
+    private func voiceTime(_ duration: Double) -> String { let seconds = max(0, Int(duration)); return String(format: "%d:%02d", seconds / 60, seconds % 60) }
+    private func primaryAction() {
+        if recorder.isRecording { finishVoice() }
+        else if draftVoice != nil { sendVoice() }
+        else if hasText { submitText() }
+        else { toggleVoiceRecording() }
     }
 
     // MARK: - Handlers
@@ -180,6 +132,7 @@ public struct ChatInputDockView: View {
     }
 
     private func toggleVoiceRecording() {
+        textFocused = false; onTypingChanged(false)
         if recorder.isRecording { finishVoice() } else { voiceStartTask = Task { await recorder.start() } }
         HapticFeedback.medium()
     }
@@ -190,9 +143,11 @@ public struct ChatInputDockView: View {
     }
     private func discardVoice() { if let file = draftVoice { try? FileManager.default.removeItem(at: file) }; draftVoice = nil }
     private func sendVoice() {
-        guard let file = draftVoice, !uploadManager.isProcessing, let base = AuthSessionManager.shared.savedServerURL else { return }
+        guard let file = draftVoice, !isSendingVoice, !uploadManager.isProcessing, let base = AuthSessionManager.shared.savedServerURL else { return }
         let token = AuthSessionManager.shared.currentSession?.token
+        isSendingVoice = true
         Task {
+            defer { isSendingVoice = false }
             do { let attachment = try await uploadManager.uploadVoice(file: file, duration: draftDuration, serverURL: base); guard AuthSessionManager.shared.currentSession?.token == token else { discardVoice(); return }; onSendAttachment(attachment); discardVoice() }
             catch { uploadManager.lastError = error.localizedDescription }
         }

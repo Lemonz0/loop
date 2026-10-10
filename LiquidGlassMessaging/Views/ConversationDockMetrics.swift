@@ -3,7 +3,7 @@ import UIKit
 
 private struct ConversationDockContextKey: EnvironmentKey { static let defaultValue: ConversationDockMetrics? = nil }
 private struct SharedConversationDockKey: EnvironmentKey { static let defaultValue = false }
-private struct ConversationDockHeightKey: EnvironmentKey { static let defaultValue: CGFloat = 60 }
+private struct ConversationDockHeightKey: EnvironmentKey { static let defaultValue = ComposerLayout.barHeight }
 extension EnvironmentValues {
     var conversationDockContext: ConversationDockMetrics? {
         get { self[ConversationDockContextKey.self] }
@@ -21,9 +21,9 @@ extension EnvironmentValues {
 
 @Observable @MainActor
 final class ConversationDockMetrics {
-    // Expanded iPhone dock dimensions from the Chats reference. UIKit's outer
-    // tab-bar frame includes extra space and must never size the input controls.
-    let height: CGFloat = 60
+    // The conversation and comment composers share the same resting height.
+    // UIKit's outer tab-bar frame must never size the input controls.
+    let height = ComposerLayout.barHeight
     let bottomMargin: CGFloat = 18
     var bottomOffset: CGFloat = 0
     var input: Binding<String>?

@@ -156,24 +156,18 @@ struct PostDetailView: View {
 
     private func composer(_ post: Post) -> some View {
         GlassEffectContainer(spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
+            ComposerCapsule {
                 TextField("Add a comment", text: $text, axis: .vertical)
                     .font(.body).lineLimit(1...4).focused($commentFocused)
-                    .frame(minHeight: 36).padding(.leading, 4)
+                    .frame(minHeight: ComposerLayout.fieldHeight).padding(.leading, ComposerLayout.leadingInset)
                     .accessibilityLabel("Add a comment")
-                Button {
+                ComposerActionButton(label: "Send comment") {
                     let submitted = text
                     text = ""
                     Task { if !(await model.comment(post, text: submitted)), text.isEmpty { text = submitted } }
-                } label: {
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                        .frame(width: 34, height: 28)
-                }.buttonStyle(.glassProminent).buttonBorderShape(.capsule)
-                    .controlSize(.small).frame(width: 50, height: 44).contentShape(Rectangle())
-                    .offset(x: -4)
-                    .accessibilityLabel("Send comment")
+                }
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || text.count > 2000 || model.isPending(postID))
-            }.padding(.horizontal, 6).padding(.vertical, 3).glassEffect(.regular.interactive(), in: Capsule())
+            }
         }.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 8)
     }
 

@@ -14,7 +14,9 @@ final class VoiceRecorder {
         guard !isRecording, !requestingPermission, WebRTCManager.shared.callStatus == .idle else { return }
         requestingPermission = true
         defer { requestingPermission = false }
-        guard await AVAudioApplication.requestRecordPermission(), !Task.isCancelled else { error = "Allow microphone access in Settings to record a voice message."; return }
+        let allowed = await AVAudioApplication.requestRecordPermission()
+        guard !Task.isCancelled else { return }
+        guard allowed else { error = "Allow microphone access in Settings to record a voice message."; return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
@@ -28,7 +30,7 @@ final class VoiceRecorder {
                     do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
                     guard let self, self.isRecording else { return }
                     self.duration = self.recorder?.currentTime ?? 0
-                    if self.duration >= 300 { self.error = "Recording reached five minutes. Tap Stop to send it."; self.recorder?.pause(); return }
+                    if self.duration >= 300 { self.error = "Recording reached five minutes. Tap Send to send it."; self.recorder?.pause(); return }
                 }
             }
         } catch { self.error = error.localizedDescription; cancel() }
