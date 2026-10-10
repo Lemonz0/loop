@@ -9,10 +9,10 @@ struct SpotifySettingsView: View {
     @State private var connection = SpotifyConnectionManager.shared
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SpotifyLogo()
+            SpotifyAccountHeader(name: settings?.connected == true ? settings?.displayName ?? "Spotify profile" : "Spotify",
+                                 profileURL: settings?.connected == true ? settings?.profileURL : nil)
             if let settings {
                 if settings.connected {
-                    if let url = settings.profileURL { Link(settings.displayName ?? "Spotify profile", destination: url).font(.headline).frame(minHeight: 44) }
                     Toggle("Share listening with mutual contacts", isOn: Binding(get: { settings.sharing }, set: { changeSharing($0) })).disabled(busy || connection.isConnecting)
                     Text("Only people you’ve both added can see your music. Paused playback and Spotify private sessions are hidden.").font(.footnote).foregroundStyle(theme.secondaryText)
                     if settings.reconnect { Text("Spotify needs you to reconnect your account.").font(.footnote).foregroundStyle(theme.secondaryText); connectButton("Reconnect Spotify") }

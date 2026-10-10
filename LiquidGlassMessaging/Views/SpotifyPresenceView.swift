@@ -30,9 +30,9 @@ struct SpotifyPresenceView: View {
                 }
             } else if let presence, presence.connected, let profileURL = presence.profileURL {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack { SpotifyLogo(); Spacer(); Text(track == nil ? "Spotify profile" : "Listening to").font(.caption.weight(.semibold)).foregroundStyle(theme.secondaryText) }
-                    Link(destination: profileURL) { Label(presence.displayName ?? "Spotify profile", systemImage: "arrow.up.right").font(.subheadline.weight(.semibold)).lineLimit(1).frame(minHeight: 44) }
+                    SpotifyAccountHeader(name: presence.displayName ?? "Spotify profile", profileURL: profileURL)
                     if let track {
+                        Text("Listening to").font(.caption.weight(.semibold)).foregroundStyle(theme.secondaryText)
                         HStack(alignment: .top, spacing: 14) {
                             if let artwork = track.artworkURL {
                                 AsyncImage(url: artwork) { image in image.resizable().scaledToFit() } placeholder: { Image(systemName: "music.note").foregroundStyle(theme.secondaryText) }
@@ -68,7 +68,21 @@ struct SpotifyPresenceView: View {
 }
 private struct SpotifyPollIdentity: Hashable { let userID: String; let revision: Int; let token: String?; let active: Bool }
 struct SpotifyLogo: View {
-    var body: some View { Image("SpotifyLogo").resizable().scaledToFit().frame(width: 70, height: 22).accessibilityLabel("Spotify") }
+    var body: some View { Image("SpotifyLogo").resizable().scaledToFit().frame(width: 24, height: 24).accessibilityLabel("Spotify") }
+}
+struct SpotifyAccountHeader: View {
+    let name: String
+    let profileURL: URL?
+    var body: some View {
+        HStack(spacing: 12) {
+            SpotifyLogo().accessibilityHidden(true)
+            if let profileURL {
+                Link(destination: profileURL) { Label(name, systemImage: "arrow.up.right").lineLimit(1) }
+                    .frame(minHeight: 44, alignment: .leading).accessibilityLabel("Spotify profile of \(name)")
+            } else { Text(name).lineLimit(1) }
+            Spacer(minLength: 0)
+        }.font(.headline).frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 private func spotifyPreview() -> SpotifyPresence {
     SpotifyPresence(connected: true, displayName: "Maya", profileURL: URL(string: "https://open.spotify.com/user/example"),
