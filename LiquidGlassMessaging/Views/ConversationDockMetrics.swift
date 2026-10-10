@@ -21,12 +21,15 @@ extension EnvironmentValues {
 
 @Observable @MainActor
 final class ConversationDockMetrics {
-    var height: CGFloat = 60
+    // Expanded iPhone dock dimensions from the Chats reference. UIKit's outer
+    // tab-bar frame includes extra space and must never size the input controls.
+    let height: CGFloat = 60
+    let bottomMargin: CGFloat = 18
     var bottomOffset: CGFloat = 0
     var input: Binding<String>?
 }
 
-/// Reads public native bar geometry; no snapshots or replacement category controls.
+/// Converts the window's bottom safe area to the floating dock's screen margin.
 struct ConversationDockMeasurement: UIViewControllerRepresentable {
     let metrics: ConversationDockMetrics
     func makeUIViewController(context: Context) -> Controller { Controller(metrics: metrics) }
@@ -38,33 +41,12 @@ struct ConversationDockMeasurement: UIViewControllerRepresentable {
         override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); measure() }
         override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); measure() }
         func measure() {
-            guard let tabs = tabBarController, !tabs.isTabBarHidden else { return }
-            let bar = tabs.tabBar
-            guard !bar.isHidden, bar.bounds.height > 0, let window = bar.window else { return }
-            // Prefer the native glass surface: the enclosing UIKit bar can also
-            // include space around the floating capsule and the home indicator.
-            let surface = glassSurface(in: bar, minimumWidth: bar.bounds.width / 2) ?? bar
-            let height = max(44, surface.bounds.height)
-            let frame = surface.convert(surface.bounds, to: window)
-            let bottomOffset = frame.maxY - window.safeAreaLayoutGuide.layoutFrame.maxY
-            guard abs(metrics.height - height) > 0.5 || abs(metrics.bottomOffset - bottomOffset) > 0.5 else { return }
+            guard let window = view.window else { return }
+            let bottomOffset = max(0, window.safeAreaInsets.bottom - metrics.bottomMargin)
+            guard abs(metrics.bottomOffset - bottomOffset) > 0.5 else { return }
             Task { @MainActor [weak self] in
-                self?.metrics.height = height
                 self?.metrics.bottomOffset = bottomOffset
             }
-        }
-        private func glassSurface(in view: UIView, minimumWidth: CGFloat) -> UIView? {
-            if let effectView = view as? UIVisualEffectView,
-               effectView.effect is UIGlassEffect,
-               effectView.bounds.width >= minimumWidth,
-               effectView.bounds.height >= 44,
-               !effectView.isHidden {
-                return effectView
-            }
-            for child in view.subviews where !child.isHidden {
-                if let surface = glassSurface(in: child, minimumWidth: minimumWidth) { return surface }
-            }
-            return nil
         }
     }
 }
