@@ -68,7 +68,7 @@ private struct PostHeader: View {
         HStack(spacing: 10) {
             CircleAvatar(user: post.author)
             VStack(alignment: .leading, spacing: 2) {
-                Text(post.author.name).profileEntry(post.author.id, name: post.author.name, source: "social").font(.headline).lineLimit(1)
+                Text(post.author.name).profileEntry(post.author.id, name: post.author.name, source: "home_feed").font(.headline).lineLimit(1)
                 Group {
                     if fullDate { Text(post.createdAt.formatted(date: .abbreviated, time: .shortened)) }
                     else { PostTimestamp(date: post.createdAt) }

@@ -9,7 +9,7 @@ struct ProfileDirectoryView: View {
     @State private var error: String?
     private var users: [User] {
         store.memberProfiles.values.filter { user in
-            (room == nil || room!.participantIds.contains(user.id)) && (search.isEmpty || user.name.localizedCaseInsensitiveContains(search))
+            (room == nil || room!.participantIds.contains(user.id)) && (search.isEmpty || user.name.localizedCaseInsensitiveContains(search) || user.username?.localizedCaseInsensitiveContains(search.trimmingCharacters(in: CharacterSet(charactersIn: "@"))) == true)
         }.sorted { $0.name < $1.name }
     }
     var body: some View {

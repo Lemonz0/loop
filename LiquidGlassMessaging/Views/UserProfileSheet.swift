@@ -8,6 +8,7 @@ struct UserProfileSheet: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let userID: String
     let context: ProfileContext
+    private let isPreview: Bool
     @State private var card: PersonCard?
     @State private var error: String?
     @State private var busy = false
@@ -23,6 +24,7 @@ struct UserProfileSheet: View {
     @State private var store = AppEnvironment.shared.chatStore
     init(userID: String, context: ProfileContext = ProfileContext(), preview: PersonCard? = nil) {
         self.userID = userID; self.context = context
+        isPreview = preview != nil
         _card = State(initialValue: preview ?? ProfileRepository.shared.cached(userID, context: context))
         _nickname = State(initialValue: (preview ?? ProfileRepository.shared.cached(userID, context: context))?.personal.nickname ?? "")
         _note = State(initialValue: (preview ?? ProfileRepository.shared.cached(userID, context: context))?.personal.note ?? "")
@@ -58,8 +60,9 @@ struct UserProfileSheet: View {
         }
         // Keep the native sheet's adaptive glass. A decorative ambient layer must not cover it.
         .background { AmbientGlowBackground().opacity(0.08).allowsHitTesting(false) }
-        .task { await refresh() }
-        .onChange(of: store.accountRevision) { _, _ in Task { await refresh() } }
+        .background { ProfileBackdropDismiss().frame(width: 0, height: 0).allowsHitTesting(false) }
+        .task { if !isPreview { await refresh() } }
+        .onChange(of: store.accountRevision) { _, _ in if !isPreview { Task { await refresh() } } }
         .fullScreenCover(isPresented: $showAvatar) { if let card { ProfileAvatarViewer(user: card.avatarUser) } }
         .sheet(isPresented: $showMedia) { ProfileSharedMediaView(messages: sharedMessages) }
         .sheet(isPresented: $showEdit, onDismiss: { Task { await refresh() } }) { ProfileEditorView() }
@@ -79,30 +82,34 @@ struct UserProfileSheet: View {
         switch confirmation { case "remove": return "Remove this member from the group?"; case "clear": return "Clear this chat for you?"; default: return "Block this account?" }
     }
     private func header(_ card: PersonCard) -> some View {
-        VStack(spacing: 12) {
+        let groupLayout = card.group != nil && !typeSize.isAccessibilitySize
+        let layout = groupLayout ? AnyLayout(HStackLayout(alignment: .center, spacing: 16)) : AnyLayout(VStackLayout(spacing: 12))
+        return VStack(spacing: 12) {
             HStack { Spacer(); if !card.isSelf && card.state == "active" { more(card) } }
-            Button { showAvatar = true } label: {
-                CircleAvatar(user: card.avatarUser, size: 104, opensProfile: false)
-            }.buttonStyle(.plain).accessibilityLabel("View profile photo full screen")
-                .disabled(card.state == "deleted")
-            HStack(spacing: 8) {
-                Text(card.user.displayName).font(.title.bold()).lineLimit(2).multilineTextAlignment(.center)
-                if card.verified { Image(systemName: "checkmark.seal.fill").foregroundStyle(theme.accent).accessibilityLabel("Verified") }
-            }.contentShape(Rectangle()).onTapGesture { if card.state == "active" { UIPasteboard.general.string = card.user.displayName; HapticFeedback.soft() } }
-                .accessibilityHint("Copy display name")
-            if card.state == "active" {
-                Button("@" + card.user.username) { UIPasteboard.general.string = "@" + card.user.username; HapticFeedback.soft() }
-                    .buttonStyle(.plain).foregroundStyle(theme.secondaryText).frame(minHeight: 44).accessibilityHint("Copy username")
-                if card.kind != "person" { Label(card.kind == "bot" ? "Bot" : "Official account", systemImage: card.kind == "bot" ? "cpu" : "checkmark.seal").font(.subheadline).padding(8).circleSurface(radius: 16) }
-                if let group = card.group { Text(group.role).font(.subheadline.bold()).padding(.horizontal, 16).padding(.vertical, 8).glassEffect(.regular.tint(theme.glassTint), in: Capsule()) }
-                if card.presenceVisible { Text(presenceLabel(card)).font(.subheadline.weight(.semibold)).foregroundStyle(theme.secondaryText) }
-                if let status = card.customStatus, !status.isEmpty { Text(status).font(.subheadline).lineLimit(2).padding(12).circleSurface(radius: 20) }
-            } else if card.state == "blocked" { Label("Blocked account", systemImage: "hand.raised.fill").foregroundStyle(theme.secondaryText) }
-            else if card.state == "private" { Label("Private profile", systemImage: "lock.fill").foregroundStyle(theme.secondaryText) }
+            layout {
+                Button { track("avatar"); showAvatar = true } label: { CircleAvatar(user: card.avatarUser, size: groupLayout ? 88 : 104, opensProfile: false) }
+                    .buttonStyle(.plain).accessibilityLabel("View profile photo full screen").disabled(card.state == "deleted")
+                VStack(alignment: groupLayout ? .leading : .center, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text(card.user.displayName).font(.title.bold()).lineLimit(2).multilineTextAlignment(groupLayout ? .leading : .center)
+                        if card.verified { Image(systemName: "checkmark.seal.fill").foregroundStyle(theme.accent).accessibilityLabel("Verified") }
+                    }.contentShape(Rectangle()).onTapGesture { if card.state == "active" { track("copy_name"); UIPasteboard.general.string = card.user.displayName; HapticFeedback.soft() } }.accessibilityHint("Copy display name")
+                    if card.state == "active" {
+                        Button("@" + card.user.username) { track("copy_username"); UIPasteboard.general.string = "@" + card.user.username; HapticFeedback.soft() }
+                            .buttonStyle(.plain).foregroundStyle(theme.secondaryText).frame(minHeight: 44).accessibilityHint("Copy username")
+                        if card.kind != "person" { Label(card.kind == "bot" ? "Bot" : "Official account", systemImage: card.kind == "bot" ? "cpu" : "checkmark.seal").font(.subheadline).padding(8).circleSurface(radius: 16) }
+                        if let group = card.group { Text(group.role).font(.subheadline.bold()).padding(.horizontal, 16).padding(.vertical, 8).glassEffect(.regular.tint(theme.glassTint), in: Capsule()) }
+                        if card.presenceVisible { Text(presenceLabel(card)).font(.subheadline.weight(.semibold)).foregroundStyle(theme.secondaryText) }
+                        if let status = card.customStatus, !status.isEmpty { Text(status).font(.subheadline).lineLimit(2).padding(12).circleSurface(radius: 20) }
+                    } else if card.state == "blocked" { Label("Blocked account", systemImage: "hand.raised.fill").foregroundStyle(theme.secondaryText) }
+                    else if card.state == "private" { Label("Private profile", systemImage: "lock.fill").foregroundStyle(theme.secondaryText) }
+                }
+            }
         }.frame(maxWidth: .infinity)
     }
+    private func track(_ action: String) { AppLogger.shared.info(.general, "profile_action", metadata: ["source": context.source, "action": action]) }
     @ViewBuilder private func actions(_ card: PersonCard) -> some View {
-        if card.isSelf { Button("Edit profile", systemImage: "pencil") { showEdit = true }.buttonStyle(.glassProminent).frame(minHeight: 44) }
+        if card.isSelf { Button("Edit profile", systemImage: "pencil") { track("edit"); showEdit = true }.buttonStyle(.glassProminent).frame(minHeight: 44) }
         else if card.state == "blocked" {
             if card.personal.blocked { Button("Unblock", systemImage: "hand.raised.slash") { perform(ProfileAction(action: "block", value: false)) }.buttonStyle(.glassProminent).disabled(busy) }
         }
@@ -184,7 +191,7 @@ struct UserProfileSheet: View {
                             .frame(maxWidth: .infinity, minHeight: 64).circleSurface(radius: 16)
                     }
                 }
-                Button("See all (\(sharedMessages.count))") { showMedia = true }.buttonStyle(.glass)
+                Button("See all (\(sharedMessages.count))") { track("shared_media"); showMedia = true }.buttonStyle(.glass)
             }
         }
     }
@@ -301,9 +308,20 @@ struct ProfileSharedMediaView: View {
         }
     }
 }
-#Preview("Person card · dark") { UserProfileSheet(userID: "preview").circlePreviewTheme(.aurora) }
-#Preview("Person card · light") { UserProfileSheet(userID: "preview").circlePreviewTheme(.daylight) }
+#Preview("Person card · dark") { UserProfileSheet(userID: "preview", preview: profileCardPreview()).circlePreviewTheme(.aurora) }
+#Preview("Person card · light") { UserProfileSheet(userID: "preview", preview: profileCardPreview()).circlePreviewTheme(.daylight) }
 #Preview("Avatar zoom · dark") { ProfileAvatarViewer(user: MockData.snapshot().friends[0]).circlePreviewTheme(.aurora) }
 #Preview("Avatar zoom · light") { ProfileAvatarViewer(user: MockData.snapshot().friends[0]).circlePreviewTheme(.daylight) }
 #Preview("Shared items · dark") { ProfileSharedMediaView(messages: []).circlePreviewTheme(.aurora) }
 #Preview("Shared items · light") { ProfileSharedMediaView(messages: []).circlePreviewTheme(.daylight) }
+
+private func profileCardPreview(group: Bool = false) -> PersonCard {
+    PersonCard(user: UserProfile(id: "preview", username: "maya_k", displayName: "Maya Kowalski"), isSelf: false, state: "active", kind: "person", verified: true,
+        personal: ProfilePersonal(), bio: "Product designer. Collects film cameras and answers voice notes far too late.", pronouns: "she/her", customStatus: "Heads down until 5 pm", timeZone: "Europe/Bucharest", memberSince: Date(timeIntervalSince1970: 1709251200),
+        presenceVisible: true, presence: UserPresence(userId: "preview", displayName: "Maya", isOnline: true),
+        mutualGroups: [MutualGroup(id: "design", name: "Design Squad")], mutualContacts: Array(MockData.snapshot().friends.prefix(3)), links: ["https://example.com"],
+        group: group ? ProfileGroup(circleId: "design", name: "Design Squad", role: "Admin", joinedAt: "2025-03-12T12:00:00.000Z", addedBy: "Andrei N.", restricted: false, canManage: true) : nil,
+        canCall: true, canMessage: true, sharedItems: [])
+}
+#Preview("Group admin card · dark") { UserProfileSheet(userID: "preview", context: ProfileContext(source: "group_members", circleID: "design"), preview: profileCardPreview(group: true)).circlePreviewTheme(.aurora) }
+#Preview("Group admin card · light") { UserProfileSheet(userID: "preview", context: ProfileContext(source: "group_members", circleID: "design"), preview: profileCardPreview(group: true)).circlePreviewTheme(.daylight) }

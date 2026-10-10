@@ -16,9 +16,9 @@ struct GlassTabBar: View {
     @State private var selectedTab = CircleTab.home
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Home", systemImage: "house", value: CircleTab.home) { HomeView(model: model) }
+            Tab("Home", systemImage: "house", value: CircleTab.home) { HomeView(model: model).environment(\.profileContext, ProfileContext(source: "home")) }
             Tab("Chats", systemImage: "bubble.left.and.bubble.right", value: CircleTab.chats) {
-                MessagesView().toolbar(activeRoom == nil ? .visible : .hidden, for: .tabBar)
+                MessagesView().environment(\.profileContext, ProfileContext(source: "chat_list")).toolbar(activeRoom == nil ? .visible : .hidden, for: .tabBar)
                     .background { ConversationDockMeasurement(metrics: metrics).frame(width: 0, height: 0).allowsHitTesting(false) }
             }
             Tab("Settings", systemImage: "gearshape", value: CircleTab.settings) { SettingsRootView(socialModel: model) }

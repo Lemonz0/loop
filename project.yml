@@ -59,6 +59,7 @@ targets:
       - path: LiquidGlassMessaging/Networking/StoryViewerModel.swift
       - path: LiquidGlassMessaging/Models/AuthModels.swift
       - path: LiquidGlassMessaging/Models/ChatModels.swift
+      - path: LiquidGlassMessaging/Models/ProfileModels.swift
       - path: LiquidGlassMessaging/Networking/AccountHTTPClient.swift
       - path: Tests
     settings:

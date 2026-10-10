@@ -319,6 +319,7 @@ export class WebSocketHub {
         if (!envelope.callSignal || !envelope.roomId) return;
         if (typeof envelope.callSignal !== 'object' || !['offer','answer','ice_candidate','hangup','ping'].includes(envelope.callSignal.signalType)) { this.send(ws, { type: 'error', reason: 'Invalid call signal' }); return; }
         const sig = { ...envelope.callSignal, senderId: existingClient!.user.id, roomId: envelope.roomId };
+        if (typeof sig.callId !== 'string' || sig.callId.length > 128 || typeof sig.isVideo !== 'boolean') { this.send(ws, { type: 'error', reason: 'Invalid call identity' }); return; }
         if (sig.targetId && !this.auth.canAccessRoom(sig.targetId, envelope.roomId)) { this.send(ws, { type: 'error', reason: 'Call target is not in this room' }); return; }
 
         serverLogger.info('CALL_SIGNAL', `Signaling event [${sig.signalType}] for call ${sig.callId}`, {

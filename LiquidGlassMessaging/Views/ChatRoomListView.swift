@@ -142,7 +142,7 @@ public struct ChatRoomListView: View {
                                 .font(.system(size: 16, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                                 .frame(width: 50, height: 50)
-                                .glassEffect(.regular, in: Circle())
+                                .glassEffect(.regular, in: Circle()).profileEntry(presence.userId, name: presence.displayName, source: "contacts")
 
                             // Online indicator badge
                             if presence.isOnline {
@@ -154,12 +154,12 @@ public struct ChatRoomListView: View {
                             }
                         }
 
-                        Text(presence.displayName)
+                        Text(presence.displayName).profileEntry(presence.userId, name: presence.displayName, source: "contacts")
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                             .lineLimit(1)
                     }
-                    .frame(width: 58)
+                    .frame(width: 58).profileEntry(presence.userId, name: presence.displayName, source: "contacts")
                 }
             }
             .padding(.horizontal, 16)
@@ -185,6 +185,7 @@ public struct ChatRoomListView: View {
 private struct ChatRowView: View {
     @Environment(\.appTheme) private var theme
     let room: ChatRoom
+    private var peerID: String? { room.participantIds.first { $0 != AuthSessionManager.shared.currentSession?.user.id } }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -194,7 +195,7 @@ private struct ChatRowView: View {
                     .font(.system(size: room.isGroup ? 20 : 18, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
                     .frame(width: 52, height: 52)
-                    .glassEffect(.regular, in: Circle())
+                    .glassEffect(.regular, in: Circle()).profileEntry(peerID ?? "", name: room.name, source: "chat_search", enabled: !room.isGroup && peerID != nil)
 
                 // Status dot
                 Circle()
@@ -207,7 +208,7 @@ private struct ChatRowView: View {
             // Content
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(room.name)
+                    Text(room.name).profileEntry(peerID ?? "", name: room.name, source: "chat_search", enabled: !room.isGroup && peerID != nil)
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)

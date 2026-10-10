@@ -77,7 +77,10 @@ private struct ProfileEntryModifier: ViewModifier {
     let source: String?
     let enabled: Bool
     private var resolvedContext: ProfileContext {
-        if let source { return ProfileContext(source: source) }
+        if let source {
+            if ["mention", "reaction"].contains(source) { return ProfileContext(source: source) }
+            var result = context; result.source = source; return result
+        }
         return context
     }
     func body(content: Content) -> some View {

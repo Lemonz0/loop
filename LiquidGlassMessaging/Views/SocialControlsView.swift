@@ -28,7 +28,7 @@ struct SocialControlsView: View {
                                 if !loading && replies.isEmpty { ContentUnavailableView("No private replies yet", systemImage: "bubble.right") }
                                 ForEach(replies) { reply in
                                     VStack(alignment: .leading, spacing: 8) {
-                                        Text(reply.sender.name).profileEntry(reply.sender.id, name: reply.sender.name, source: "social").font(.headline)
+                                        Text(reply.sender.name).profileEntry(reply.sender.id, name: reply.sender.name, source: "social_controls").font(.headline)
                                         Text(reply.text).font(.body)
                                         Text(reply.createdAt, style: .relative).font(.caption)
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding().circleSurface(radius: 22)

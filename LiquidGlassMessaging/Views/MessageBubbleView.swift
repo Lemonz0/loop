@@ -17,7 +17,7 @@ public struct MessageBubbleView: View {
         HStack(alignment: .bottom, spacing: 8) {
             if message.isFromCurrentUser {
                 Spacer(minLength: 44)
-            } else if isGroup {
+            } else {
                 CircleAvatar(user: store.memberProfiles[message.senderId] ?? User(id: message.senderId, name: message.senderName,
                     avatarURL: message.senderAvatarURL, allowsTrollPosts: true), size: 30)
 

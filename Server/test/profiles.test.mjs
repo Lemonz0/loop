@@ -112,3 +112,22 @@ test('replies and reactions resolve server identities; private clear and call hi
   friend.ws.send(JSON.stringify({ type: 'call_signal', roomId: room.id, callSignal: { callId: 'call-two', signalType: 'offer', isVideo: false } }));
   assert.match((await friend.wait(e => e.type === 'error')).reason, /restricted/);
 });
+test('disappearing messages and their referenced media cannot be read or reacted to after expiry', async t => {
+  const f = await fixture(t), id = f.friend.user.id;
+  const room = f.auth.directRoom(f.owner.user.id, id);
+  f.auth.activateDirectRoom(room.id);
+  f.auth.registerRoomMedia(f.owner.user.id, room.id, 'expired.jpg');
+  fs.mkdirSync(path.join(f.directory, 'uploads'), { recursive: true });
+  fs.writeFileSync(path.join(f.directory, 'uploads', 'expired.jpg'), Buffer.from('test-media'));
+  fs.writeFileSync(path.join(f.directory, 'messages.json'), JSON.stringify({ [room.id]: [{ id: 'old', roomId: room.id, senderId: f.owner.user.id, senderName: 'owner', content: '', timestamp: new Date(Date.now() - 2 * 86400000).toISOString(), status: 'sent', mediaAttachment: { id: 'media', fileName: 'expired.jpg', byteSize: 10, mimeType: 'image/jpeg', mediaType: 'image', remoteURL: '/uploads/expired.jpg' } }] }));
+  f.profiles.action(f.owner.user.id, id, { action: 'disappearing', seconds: 86400 });
+  const restarted = createLoopServer({ dataDirectory: f.directory });
+  restarted.server.listen(0, '127.0.0.1'); await once(restarted.server, 'listening');
+  t.after(async () => { restarted.wss.close(); restarted.server.closeAllConnections(); await new Promise(resolve => restarted.server.close(resolve)); });
+  const base = `http://127.0.0.1:${restarted.server.address().port}`;
+  const headers = { Authorization: 'Bearer ' + f.friend.token, 'Content-Type': 'application/json' };
+  const card = await (await fetch(base + `/api/profiles/${f.owner.user.id}?roomId=${room.id}`, { headers })).json();
+  assert.deepEqual(card.sharedItems, []);
+  assert.equal((await fetch(base + '/uploads/expired.jpg', { headers })).status, 404);
+  assert.equal((await fetch(base + `/api/chats/${room.id}/messages/old/reaction`, { method: 'POST', headers, body: JSON.stringify({ emoji: '👍' }) })).status, 404);
+});
