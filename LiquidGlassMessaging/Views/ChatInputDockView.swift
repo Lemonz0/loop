@@ -19,6 +19,7 @@ public struct ChatInputDockView: View {
 
     @Namespace private var dockNamespace
     @State private var selectedPhotosItem: PhotosPickerItem?
+    @State private var isShowingMediaPicker = false
     @State private var recorder = VoiceRecorder.shared
     @State private var voiceStartTask: Task<Void, Never>?
     @State private var draftVoice: URL?
@@ -81,6 +82,8 @@ public struct ChatInputDockView: View {
             }
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.8), value: composerPhase)
+        .photosPicker(isPresented: $isShowingMediaPicker, selection: $selectedPhotosItem, matching: .any(of: [.images, .videos]))
+        .onChange(of: isShowingMediaPicker) { _, presented in AppEnvironment.shared.chatStore.isPickingMedia = presented }
         .alert("Send media", isPresented: Binding(get: { recorder.error != nil || uploadManager.lastError != nil }, set: { if !$0 { recorder.error = nil; uploadManager.lastError = nil } })) { Button("OK") { recorder.error = nil; uploadManager.lastError = nil } } message: { Text(recorder.error ?? uploadManager.lastError ?? "") }
         .onDisappear { voiceStartTask?.cancel(); recorder.cancel(); if !isSendingVoice && !uploadManager.isProcessing { discardVoice() } }
         .onChange(of: scenePhase) { _, phase in if phase == .background || (phase != .active && recorder.isRecording) { voiceStartTask?.cancel(); recorder.cancel() } }
@@ -102,7 +105,11 @@ public struct ChatInputDockView: View {
                 }.accessibilityLabel(recorder.isRecording ? "Cancel voice recording" : "Discard voice message")
                     .disabled(isSendingVoice)
             } else {
-                PhotosPicker(selection: $selectedPhotosItem, matching: .any(of: [.images, .videos, .livePhotos, .panoramas, .screenshots])) {
+                Button {
+                    // Keep the shared dock mounted while the system picker covers the chat.
+                    AppEnvironment.shared.chatStore.isPickingMedia = true
+                    isShowingMediaPicker = true
+                } label: {
                     Image(systemName: "photo.on.rectangle.angled").font(.body.weight(.medium)).foregroundStyle(theme.accent)
                         .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
                 }.accessibilityLabel("Attach a photo or video").disabled(uploadManager.isProcessing || recorder.requestingPermission)

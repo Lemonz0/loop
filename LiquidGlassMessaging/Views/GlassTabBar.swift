@@ -28,12 +28,17 @@ struct GlassTabBar: View {
         .onChange(of: ProfilePresentation.shared.destination?.id) { _, id in if id != nil { selectedTab = .chats } }
         .task(id: NotificationManager.shared.pendingRoomID) {
             guard let id = NotificationManager.shared.pendingRoomID else { return }
+            guard NotificationManager.shared.pendingUserID == AuthSessionManager.shared.currentSession?.user.id else {
+                NotificationManager.shared.pendingRoomID = nil; NotificationManager.shared.pendingUserID = nil
+                return
+            }
             await chatStore.refreshRooms()
             guard NotificationManager.shared.pendingRoomID == id,
                   let room = chatStore.rooms.first(where: { $0.id == id }) else { return }
             selectedTab = .chats
             ProfilePresentation.shared.destination = room
             NotificationManager.shared.pendingRoomID = nil
+            NotificationManager.shared.pendingUserID = nil
         }
         .environment(\.conversationDockContext, metrics)
         .environment(\.usesSharedConversationDock, true)

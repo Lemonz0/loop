@@ -10,6 +10,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private(set) var remoteRegistered = false
     private(set) var status = "Alerts while Loop is running."
     var pendingRoomID: String?
+    var pendingUserID: String?
     private var deviceToken: String?
     private var generation = 0
     private let center = UNUserNotificationCenter.current()
@@ -18,6 +19,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     override private init() { super.init(); center.delegate = self }
 
     func configure() async {
+        generation += 1
         let attempt = generation
         guard AuthSessionManager.shared.isAuthenticated else { return }
         do {
@@ -32,17 +34,17 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                 status = "Notifications are off."
                 return
             }
-            guard permission == .authorized || permission == .provisional else { status = "Allow notifications in iOS Settings."; return }
+            guard permission == .authorized || permission == .provisional else { remoteRegistered = false; try await unregister(); status = "Allow notifications in iOS Settings."; return }
             guard let environment = pushEnvironment else { status = "Local alerts enabled. This signing profile does not support background push."; return }
             let auth = AuthSessionManager.shared
             guard let token = auth.currentSession?.token, let base = auth.savedServerURL else { return }
             struct Status: Decodable, Sendable { let available: Bool }
             let result = try await AccountHTTPClient.shared.request("api/push/status", baseURL: base, token: token, as: Status.self)
             guard generation == attempt, auth.currentSession?.token == token else { return }
-            guard result.available else { status = "Local alerts enabled. Server APNs credentials are not configured yet."; return }
+            guard result.available else { remoteRegistered = false; status = "Local alerts enabled. Server APNs credentials are not configured yet."; return }
             if deviceToken != nil { await register(environment: environment) }
             else { status = "Registering with Apple…"; UIApplication.shared.registerForRemoteNotifications() }
-        } catch { status = "Local alerts enabled. Push setup could not reach the server." }
+        } catch { if generation == attempt { status = "Local alerts enabled. Push setup could not reach the server." } }
     }
     func refreshPermission() async { permission = await center.notificationSettings().authorizationStatus }
     func receivedToken(_ data: Data) {
@@ -60,7 +62,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                 body: JSONEncoder().encode(Body(deviceToken: deviceToken, topic: topic, environment: environment, sound: sounds)), as: Result.self)
             guard generation == attempt, enabled, auth.currentSession?.token == token else { return }
             remoteRegistered = result.registered; status = result.registered ? "Background message notifications enabled." : "Local alerts enabled. Server APNs credentials are not configured yet."
-        } catch { registrationFailed() }
+        } catch { if generation == attempt { registrationFailed() } }
     }
     private func unregister() async throws {
         let auth = AuthSessionManager.shared
@@ -69,7 +71,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         _ = try await AccountHTTPClient.shared.request("api/push/unregister", baseURL: base, token: token, body: Data("{}".utf8), as: Result.self)
     }
     func reset() {
-        generation += 1; remoteRegistered = false; pendingRoomID = nil
+        generation += 1; remoteRegistered = false; pendingRoomID = nil; pendingUserID = nil
         center.removeAllPendingNotificationRequests(); center.removeAllDeliveredNotifications()
         UIApplication.shared.unregisterForRemoteNotifications()
         Task { try? await center.setBadgeCount(0) }
@@ -98,8 +100,10 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let room = response.notification.request.content.userInfo["roomId"] as? String
         let user = response.notification.request.content.userInfo["userId"] as? String
         await MainActor.run {
-            guard let user, user == AuthSessionManager.shared.currentSession?.user.id else { return }
-            self.pendingRoomID = room
+            guard let user, let room else { return }
+            // Cold-launch taps arrive before the server-bound session is validated.
+            // The tab host checks the recipient after authentication finishes.
+            self.pendingUserID = user; self.pendingRoomID = room
         }
     }
     // Re-signing may add or remove push capability. Read the actual embedded profile.

@@ -155,7 +155,7 @@ public struct ChatRoomView: View {
             withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.35)) { chatStore.activeRoom = room }
         }
         .onDisappear {
-            if chatStore.activeRoom?.id == room.id {
+            if chatStore.activeRoom?.id == room.id, !chatStore.isPickingMedia {
                 withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.35)) { chatStore.activeRoom = nil; dockContext?.input = nil }
             }
         }

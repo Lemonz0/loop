@@ -8,6 +8,7 @@ public final class ChatStore {
     // MARK: - Published State
     public var rooms: [ChatRoom] = []
     public var activeRoom: ChatRoom?
+    public var isPickingMedia = false
     public var messagesByRoomId: [String: [ChatMessage]] = [:]
     public var typingUsersByRoomId: [String: Set<String>] = [:]
     public var presenceByUserId: [String: UserPresence] = [:]
@@ -70,6 +71,7 @@ public final class ChatStore {
         connectionState = .disconnected
     }
     public func reset() {
+        isPickingMedia = false
         replyDraft = nil
         stop(); memberProfiles = [:]; Task { await WebRTCManager.shared.hangup() }; rooms = []; activeRoom = nil; messagesByRoomId = [:]; typingUsersByRoomId = [:]; presenceByUserId = [:]
         typingResetTasks.values.forEach { $0.cancel() }; typingResetTasks = [:]
