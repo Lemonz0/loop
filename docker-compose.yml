@@ -1,0 +1,14 @@
+services:
+  liquid-glass-server:
+    build:
+      context: ./Server
+      dockerfile: Dockerfile
+    container_name: liquid-glass-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - INVITE_KEY=${INVITE_KEY:?Set a private bootstrap secret before starting the server}
+    volumes:
+      - ./Server/uploads:/app/uploads

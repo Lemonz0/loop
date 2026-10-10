@@ -1,0 +1,145 @@
+import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+
+public extension View {
+    func circleSurface(radius: CGFloat = 28, interactive: Bool = false) -> some View {
+        modifier(CircleSurfaceModifier(radius: radius, interactive: interactive))
+    }
+    func circlePreviewTheme(_ preset: ThemePreset) -> some View {
+        let theme = AppTheme(preset: preset)
+        return environment(\.appTheme, theme).environment(\.colorScheme, theme.colorScheme)
+            .preferredColorScheme(theme.colorScheme).tint(theme.accent)
+    }
+}
+
+private struct CircleSurfaceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.appTheme) private var theme
+    let radius: CGFloat
+    let interactive: Bool
+    func body(content: Content) -> some View {
+        let glass = reduceTransparency ? Glass.regular.tint(theme.backgroundBase) : Glass.regular
+        content.glassEffect(interactive ? glass.interactive() : glass,
+                            in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+struct CircleAvatar: View {
+    @Environment(\.appTheme) private var theme
+    let user: User
+    var size: CGFloat = 40
+    var body: some View {
+        ZStack {
+            if let url = user.avatarURL {
+                CircleMediaView(media: CircleMedia(url: url), placeholderSymbol: "person.fill")
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: size * 0.4, weight: .medium))
+                    .foregroundStyle(theme.accent)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .glassEffect(.regular.tint(theme.glassTint), in: Circle())
+        .accessibilityHidden(true)
+    }
+}
+
+struct CircleMediaView: View {
+    @Environment(\.appTheme) private var theme
+    let media: CircleMedia
+    var placeholderSymbol = "photo"
+    var body: some View {
+        GeometryReader { geometry in
+            Group {
+                #if canImport(UIKit)
+                if let data = media.imageData, let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    remoteImage
+                }
+                #else
+                remoteImage
+                #endif
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
+        }
+    }
+    private var remoteImage: some View {
+        Group {
+            if let url = media.url, url.host == nil || url.host == AuthSessionManager.shared.savedServerURL?.host {
+                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol)
+            } else {
+                AsyncImage(url: media.url) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    case .failure: placeholder.overlay { Image(systemName: placeholderSymbol).font(.title).foregroundStyle(.primary) }
+                    default: placeholder.overlay { ProgressView().tint(theme.accent) }
+                    }
+                }
+            }
+        }
+    }
+    private var placeholder: some View {
+        LinearGradient(colors: theme.meshColors + [theme.backgroundBase], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+}
+
+struct CircleIconButton: View {
+    let symbol: String
+    let label: String
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.body.weight(.semibold))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(label)
+    }
+}
+
+struct CircleErrorAlert: ViewModifier {
+    @Bindable var model: CircleViewModel
+    func body(content: Content) -> some View {
+        content.alert("Loop", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button("OK") { model.errorMessage = nil }
+        } message: { Text(model.errorMessage ?? "") }
+    }
+}
+
+#Preview("Avatar · dark") { CircleAvatar(user: MockData.snapshot().friends[1], size: 62).circlePreviewTheme(.aurora) }
+#Preview("Avatar · light") { CircleAvatar(user: MockData.snapshot().friends[1], size: 62).circlePreviewTheme(.daylight) }
+#Preview("Media · dark") { CircleMediaView(media: MockData.snapshot().posts[0].media[0]).frame(height: 300).circlePreviewTheme(.aurora) }
+#Preview("Media · light") { CircleMediaView(media: MockData.snapshot().posts[0].media[0]).frame(height: 300).circlePreviewTheme(.daylight) }
+#Preview("Icon · dark") { CircleIconButton(symbol: "plus", label: "Create") {}.circlePreviewTheme(.aurora) }
+#Preview("Icon · light") { CircleIconButton(symbol: "plus", label: "Create") {}.circlePreviewTheme(.daylight) }
+
+@MainActor
+private struct PrivateSocialImage: View {
+    let url: URL
+    var placeholderSymbol = "photo.badge.exclamationmark"
+    @State private var file: URL?
+    @State private var failed = false
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let file, let image = UIImage(contentsOfFile: file.path) { Image(uiImage: image).resizable().scaledToFill() }
+            else if failed { Image(systemName: placeholderSymbol).foregroundStyle(.primary) }
+            else { ProgressView() }
+            #else
+            Image(systemName: "photo")
+            #endif
+        }
+        .id(url)
+        .task(id: url) {
+            file = nil; failed = false
+            do { let downloaded = try await AuthSessionManager.shared.mediaFile(url); try Task.checkCancellation(); file = downloaded }
+            catch is CancellationError {} catch { failed = true }
+        }
+    }
+}

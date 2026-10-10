@@ -1,0 +1,189 @@
+import SwiftUI
+
+struct PostTimestamp: View {
+    let date: Date
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(Self.label(date, now: context.date))
+        }
+    }
+    static func label(_ date: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 { return "\(seconds / 60)m" }
+        if seconds < 86400 { return "\(seconds / 3600)h" }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+struct PostCard: View {
+    @Environment(\.appTheme) private var theme
+    let post: Post
+    @Bindable var model: CircleViewModel
+    @State private var showDetail = false
+    @State private var showLikes = false
+    @State private var showEdit = false
+    @State private var confirmDelete = false
+    private var owned: Bool { post.author.id == model.currentUserID }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            PostHeader(post: post).contentShape(Rectangle()).onTapGesture { showDetail = true }
+            PostPhotos(post: post).onTapGesture { showDetail = true }
+            Text(post.caption).font(.body).onTapGesture { showDetail = true }
+            HStack(spacing: 12) {
+                Button { Task { await model.like(post) } } label: {
+                    Label("\(post.likes)", systemImage: post.isLiked ? "heart.fill" : "heart").frame(minWidth: 44, minHeight: 44)
+                }.buttonStyle(.glass).disabled(model.isPending(post.id))
+                    .accessibilityLabel("\(post.isLiked ? "Unlike" : "Like") post, \(post.likes) likes")
+                    .highPriorityGesture(LongPressGesture().onEnded { _ in showLikes = true }, including: owned ? .all : .none)
+                    .accessibilityAction(named: "Show likes") { if owned { showLikes = true } }
+                Button { showDetail = true } label: {
+                    Label("\(post.comments.count)", systemImage: "bubble.right").frame(minWidth: 44, minHeight: 44)
+                }.buttonStyle(.glass).accessibilityLabel("Comments, \(post.comments.count)")
+                Spacer()
+            }
+        }.padding(16).circleSurface().contentShape(Rectangle())
+            .contextMenu {
+                if owned {
+                    Button("Edit", systemImage: "pencil") { showEdit = true }
+                    Button("Who liked this post", systemImage: "heart") { showLikes = true }
+                    Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                }
+            }
+            .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete post", role: .destructive) { Task { await model.delete(post) } }
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showDetail) { PostDetailView(postID: post.id, model: model) }
+            .sheet(isPresented: $showEdit) { EditPostView(post: post, model: model) }
+            .sheet(isPresented: $showLikes) { PostLikesView(postID: post.id, model: model) }
+    }
+}
+
+private struct PostHeader: View {
+    @Environment(\.appTheme) private var theme
+    let post: Post
+    var fullDate = false
+    var body: some View {
+        HStack(spacing: 10) {
+            CircleAvatar(user: post.author)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(post.author.name).font(.headline).lineLimit(1)
+                Group {
+                    if fullDate { Text(post.createdAt.formatted(date: .abbreviated, time: .shortened)) }
+                    else { PostTimestamp(date: post.createdAt) }
+                }.font(.caption).foregroundStyle(theme.secondaryText)
+            }
+            Spacer()
+        }
+    }
+}
+private struct PostPhotos: View {
+    let post: Post
+    var body: some View {
+        Group {
+            if post.media.count > 1 {
+                TabView {
+                    ForEach(Array(post.media.enumerated()), id: \.offset) { _, media in CircleMediaView(media: media) }
+                }.tabViewStyle(.page(indexDisplayMode: .always))
+            } else if let media = post.media.first { CircleMediaView(media: media) }
+        }.frame(height: 290).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .accessibilityLabel("Photo by \(post.author.name)")
+    }
+}
+struct PostDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    let postID: UUID
+    @Bindable var model: CircleViewModel
+    @State private var text = ""
+    private var post: Post? { model.snapshot.posts.first { $0.id == postID } }
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AmbientGlowBackground()
+                ScrollView {
+                    GlassEffectContainer(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if let post {
+                                PostHeader(post: post, fullDate: true)
+                                PostPhotos(post: post)
+                                Text(post.caption).font(.body)
+                                Text("Comments").font(.headline)
+                                if post.comments.isEmpty { Text("No comments yet").font(.subheadline) }
+                                ForEach(Array(post.comments.enumerated()), id: \.offset) { _, comment in
+                                    Text(comment).frame(maxWidth: .infinity, alignment: .leading).padding().circleSurface(radius: 20)
+                                }
+                            } else { ContentUnavailableView("Post unavailable", systemImage: "photo") }
+                        }.padding(20)
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let post {
+                    HStack {
+                        TextField("Add a comment", text: $text, axis: .vertical).lineLimit(1...4)
+                        Button("Send") {
+                            let submitted = text
+                            text = ""
+                            Task { if !(await model.comment(post, text: submitted)), text.isEmpty { text = submitted } }
+                        }.buttonStyle(.glassProminent)
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isPending(postID))
+                    }.padding(16).circleSurface(radius: 24).padding(.horizontal, 16).padding(.bottom, 8)
+                }
+            }
+            .navigationTitle("Post").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+private struct EditPostView: View {
+    @Environment(\.dismiss) private var dismiss
+    let post: Post
+    @Bindable var model: CircleViewModel
+    @State private var caption: String
+    @State private var saving = false
+    init(post: Post, model: CircleViewModel) { self.post = post; self.model = model; _caption = State(initialValue: post.caption) }
+    var body: some View {
+        NavigationStack {
+            ZStack { AmbientGlowBackground(); ScrollView { TextField("Description", text: $caption, axis: .vertical).lineLimit(3...12).padding().circleSurface().padding(20) } }
+                .navigationTitle("Edit post")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save") { saving = true; Task { if await model.edit(post, caption: caption) { dismiss() }; saving = false } }.disabled(saving || caption.count > 2000) }
+                }.interactiveDismissDisabled(saving)
+        }
+    }
+}
+private struct PostLikesView: View {
+    @Environment(\.appTheme) private var theme
+    @Environment(\.dismiss) private var dismiss
+    let postID: UUID
+    @Bindable var model: CircleViewModel
+    @State private var users: [User] = []
+    @State private var loading = true
+    @State private var error: String?
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AmbientGlowBackground()
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if loading { ProgressView() }
+                        else if let error { Text(error).foregroundStyle(theme.destructive) }
+                        else if users.isEmpty { Text("No likes yet") }
+                        ForEach(users) { user in HStack { CircleAvatar(user: user); Text(user.name); Spacer() }.padding().circleSurface() }
+                    }.padding(20)
+                }
+            }.navigationTitle("Likes").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+                .task { do { users = try await model.repository.postLikes(id: postID) } catch { self.error = error.localizedDescription }; loading = false }
+        }
+    }
+}
+#Preview("Post · dark") { PostCard(post: MockData.snapshot().posts[0], model: CircleViewModel()).padding().circlePreviewTheme(.aurora) }
+#Preview("Post · light") { PostCard(post: MockData.snapshot().posts[0], model: CircleViewModel()).padding().circlePreviewTheme(.daylight) }
+#Preview("Post detail · dark") { let model = CircleViewModel(); PostDetailView(postID: model.snapshot.posts[0].id, model: model).circlePreviewTheme(.aurora) }
+#Preview("Post detail · light") { let model = CircleViewModel(); PostDetailView(postID: model.snapshot.posts[0].id, model: model).circlePreviewTheme(.daylight) }
+#Preview("Edit post · dark") { EditPostView(post: MockData.snapshot().posts[0], model: CircleViewModel()).circlePreviewTheme(.aurora) }
+#Preview("Edit post · light") { EditPostView(post: MockData.snapshot().posts[0], model: CircleViewModel()).circlePreviewTheme(.daylight) }
+#Preview("Likes · dark") { PostLikesView(postID: UUID(), model: CircleViewModel()).circlePreviewTheme(.aurora) }
+#Preview("Likes · light") { PostLikesView(postID: UUID(), model: CircleViewModel()).circlePreviewTheme(.daylight) }

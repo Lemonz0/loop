@@ -1,0 +1,134 @@
+name: CI Pipeline (iOS & Backend)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # 1. Backend Server CI (Linux / Ubuntu)
+  # =========================================================================
+  backend-ci:
+    name: Backend Lint, Build & Container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: Server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./Server
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: ./Server
+        run: npm run build
+
+      - name: Test accounts and private-circle access
+        working-directory: ./Server
+        run: npm test
+
+      - name: Verify Docker Container Build
+        run: |
+          if docker build -t liquid-glass-server:test ./Server; then
+            exit 0
+          fi
+          # Same Docker Official Image, available when Docker Hub is unreachable.
+          docker build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:22-alpine -t liquid-glass-server:test ./Server
+
+  # =========================================================================
+  # 2. iOS Native Client CI & IPA Packaging (Apple Silicon macOS Runner)
+  # =========================================================================
+  ios-ci:
+    name: iOS Swift Build & IPA Packaging
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE_26=$(find /Applications -maxdepth 1 -name "Xcode_26*.app" | sort -V | tail -n 1)
+          if [ -n "$XCODE_26" ]; then
+            echo "Selecting $XCODE_26"
+            sudo xcode-select -s "$XCODE_26"
+          else
+            XCODE_LATEST=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
+            echo "Selecting $XCODE_LATEST"
+            sudo xcode-select -s "$XCODE_LATEST"
+          fi
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+
+      - name: Randomize Sideloading Identifiers
+        run: |
+          RAND_SUFFIX=$(python3 -c "import uuid; print(uuid.uuid4().hex[:8])")
+          RAND_BUILD=$(python3 -c "import random; print(random.randint(10000, 99999))")
+          echo "Generated random bundle suffix: $RAND_SUFFIX"
+          echo "Generated random build number: $RAND_BUILD"
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER: .*/PRODUCT_BUNDLE_IDENTIFIER: \"io.app.lg_${RAND_SUFFIX}\"/" project.yml
+          sed -i '' "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: \"${RAND_BUILD}\"/" project.yml
+          sed -i '' "s/MARKETING_VERSION: .*/MARKETING_VERSION: \"1.0.${RAND_BUILD}\"/" project.yml
+          grep "PRODUCT_BUNDLE_IDENTIFIER" project.yml
+          grep "CURRENT_PROJECT_VERSION" project.yml
+
+      - name: Generate Xcode Project
+        run: |
+          xcodegen generate
+          sed -i '' 's/objectVersion = .*/objectVersion = 56;/' LiquidGlass.xcodeproj/project.pbxproj
+          sed -i '' '/preferredProjectObjectVersion/d' LiquidGlass.xcodeproj/project.pbxproj
+          sed -i '' '/minimizedProjectReferenceProxies/d' LiquidGlass.xcodeproj/project.pbxproj
+          head -n 10 LiquidGlass.xcodeproj/project.pbxproj
+
+      - name: Test theme contrast and persistence
+        run: |
+          node scripts/check-theme-contrast.cjs
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,vs in d["devices"].items() if "iOS-26" in k for v in vs if "iPhone" in v["name"]))')
+          xcodebuild test \
+            -project LiquidGlass.xcodeproj \
+            -scheme ThemeContrast \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -resultBundlePath build/ThemeContrast.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build & Archive iOS App
+        run: |
+          xcodebuild archive \
+            -project LiquidGlass.xcodeproj \
+            -scheme LiquidGlass \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/LiquidGlass.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package into IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/LiquidGlass.xcarchive/Products/Applications/*.app Payload/
+          zip -r LiquidGlassMessaging.ipa Payload
+          ls -lh LiquidGlassMessaging.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiquidGlassMessaging-IPA
+          path: LiquidGlassMessaging.ipa
+          if-no-files-found: error

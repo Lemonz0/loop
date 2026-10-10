@@ -1,0 +1,80 @@
+name: LiquidGlass
+options:
+  bundleIdPrefix: com.lemonz
+  xcodeVersion: "26.0"
+  deploymentTarget:
+    iOS: "26.0"
+
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC.git
+    exactVersion: 154.0.0
+
+targets:
+  LiquidGlass:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: LiquidGlassMessaging/App
+      - path: LiquidGlassMessaging/DesignSystem
+      - path: LiquidGlassMessaging/Models
+      - path: LiquidGlassMessaging/Networking
+      - path: LiquidGlassMessaging/MediaPipeline
+      - path: LiquidGlassMessaging/Calling
+      - path: LiquidGlassMessaging/Views
+      - path: LiquidGlassMessaging/Resources
+        excludes: [Info.plist]
+    dependencies:
+      - package: WebRTC
+    settings:
+      PRODUCT_NAME: "LiquidGlass"
+      PRODUCT_BUNDLE_IDENTIFIER: "org.app.liquid_rnd"
+      CURRENT_PROJECT_VERSION: "8472"
+      MARKETING_VERSION: "1.0.8472"
+      SWIFT_VERSION: "5.9"
+      INFOPLIST_FILE: LiquidGlassMessaging/Resources/Info.plist
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_CFBundleDisplayName: "Loop"
+      ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
+      INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES
+      INFOPLIST_KEY_NSCameraUsageDescription: "Camera access is needed for high-definition video calls."
+      INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone access is needed for voice messages and group calls."
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Photo library access is needed to select and compress high-resolution media."
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      TARGETED_DEVICE_FAMILY: "1,2"
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: ""
+      CODE_SIGNING_ALLOWED: NO
+      CODE_SIGNING_REQUIRED: NO
+  ThemeContrastTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: LiquidGlassMessaging/DesignSystem/ThemePalette.swift
+      - path: LiquidGlassMessaging/Models/SocialModels.swift
+      - path: LiquidGlassMessaging/Models/MockData.swift
+      - path: LiquidGlassMessaging/Networking/FeedRepository.swift
+      - path: LiquidGlassMessaging/Networking/StoryViewerModel.swift
+      - path: LiquidGlassMessaging/Models/AuthModels.swift
+      - path: LiquidGlassMessaging/Models/ChatModels.swift
+      - path: LiquidGlassMessaging/Networking/AccountHTTPClient.swift
+      - path: Tests
+    settings:
+      SWIFT_VERSION: "5.9"
+      GENERATE_INFOPLIST_FILE: YES
+      CODE_SIGNING_ALLOWED: NO
+
+schemes:
+  LiquidGlass:
+    build:
+      targets:
+        LiquidGlass: all
+  ThemeContrast:
+    build:
+      targets:
+        ThemeContrastTests: [test]
+    test:
+      targets:
+        - ThemeContrastTests

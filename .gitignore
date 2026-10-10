@@ -1,0 +1,58 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Xcode / Swift
+.build/
+Packages/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Node.js
+Server/node_modules/
+Server/dist/
+Server/uploads/*
+!Server/uploads/.gitkeep
+Server/npm-debug.log*
+Server/yarn-debug.log*
+Server/yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*
+!.env.example
+
+# Private signing keys and provisioning profiles
+*.p12
+*.pfx
+*.p8
+*.key
+*.mobileprovision
+*.provisionprofile
+
+# Logs
+Server/logs/
+*.log
+
+# Private backend identity/session store
+Server/data/auth.json
+Server/data/auth.json.*.tmp
+
+# PC backend bootstrap invite and runtime notes
+Server/.local/
+
+# Private social content and server-only moderation identity
+Server/data/social.json
+Server/data/social.json.*.tmp
+
+# Private runtime chat history and wallpapers
+Server/data/messages.json
+Server/data/themes.json
