@@ -42,7 +42,10 @@ async function fixture(t) {
   const link = async (session = listener) => {
     const start = app.spotify.begin(session.user.id, session.token);
     const result = await app.spotify.callback(new URLSearchParams({ state: start.attempt, code: session.user.username }));
-    assert.equal(new URL(result.redirect).searchParams.get('result'), 'connected'); return start;
+    const relay = new URL(result.redirect).searchParams; assert.equal(relay.get('result'), 'authorize');
+    assert.equal(app.spotify.settings(session.user.id).connected, false);
+    const linked = await app.spotify.finish(session.user.id, session.token, { attempt: start.attempt, code: relay.get('code') });
+    assert.equal(linked.connected, true); return start;
   };
   const mutual = () => {
     app.profiles.action(owner.user.id, listener.user.id, { action: 'contact', value: true });
@@ -59,8 +62,8 @@ test('PKCE is session-bound, single-use, expires, and never exposes or stores pl
   const exchange = f.calls.find(c => c.url.endsWith('/api/token'));
   assert.equal(url.searchParams.get('code_challenge'), createHash('sha256').update(exchange.parameters.get('code_verifier')).digest('base64url'));
   assert.equal(url.searchParams.has('code_verifier'), false); assert.equal(url.searchParams.has('token'), false);
-  await assert.rejects(f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })), /expired/);
-  await assert.rejects(f.spotify.callback(new URLSearchParams({ state: 'forged', code: 'listener' })), /expired/);
+  assert.throws(() => f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })), /expired/);
+  assert.throws(() => f.spotify.callback(new URLSearchParams({ state: 'forged', code: 'listener' })), /expired/);
   const saved = fs.readFileSync(path.join(f.directory, 'spotify.json'), 'utf8');
   assert.ok(!saved.includes('private-access')); assert.ok(!saved.includes('private-refresh'));
   const settings = f.spotify.settings(f.listener.user.id); assert.equal(settings.connected, true); assert.equal(settings.sharing, false);
@@ -68,7 +71,7 @@ test('PKCE is session-bound, single-use, expires, and never exposes or stores pl
   const restarted = new SpotifyStore(f.auth, f.profiles, f.directory, f.options, f.now); assert.equal(restarted.settings(f.listener.user.id).displayName, 'listener');
   assert.throws(() => new SpotifyStore(f.auth, f.profiles, f.directory, { ...f.options, encryptionKey: 'cd'.repeat(32) }), /authenticat/i);
   const expired = f.spotify.begin(f.owner.user.id, f.owner.token); f.advance(600001);
-  await assert.rejects(f.spotify.callback(new URLSearchParams({ state: expired.attempt, code: 'owner' })), /expired/);
+  assert.throws(() => f.spotify.callback(new URLSearchParams({ state: expired.attempt, code: 'owner' })), /expired/);
 });
 test('activity is opt-in and strictly mutual-contact-only; block and private-profile rules are enforced server-side', async t => {
   const f = await fixture(t); await f.link();
@@ -134,8 +137,9 @@ test('cancel/logout cannot finish linking after OAuth network requests have star
   const f = await fixture(t); let resolve, entered; const started = new Promise(r => { entered = r; });
   f.mock.beforeProfile = () => { entered(); return new Promise(r => { resolve = r; }); };
   const start = f.spotify.begin(f.listener.user.id, f.listener.token);
-  const pending = f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })); await started;
-  f.spotify.cancel(f.listener.user.id); resolve(); assert.equal(new URL((await pending).redirect).searchParams.get('result'), 'error');
+  const relay = new URL(f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })).redirect).searchParams;
+  const pending = f.spotify.finish(f.listener.user.id, f.listener.token, { attempt: start.attempt, code: relay.get('code') }); await started;
+  f.spotify.cancel(f.listener.user.id); resolve(); await assert.rejects(pending, /could not connect/);
   assert.equal(f.spotify.settings(f.listener.user.id).connected, false);
   f.mock.beforeProfile = undefined;
   const logout = f.spotify.begin(f.listener.user.id, f.listener.token); f.auth.logout(f.listener.token);
@@ -150,5 +154,19 @@ test('HTTP Spotify endpoints require Loop authentication while the callback safe
   const start = await (await fetch(base + '/api/spotify/connect', { method: 'POST', headers: { Authorization: 'Bearer ' + f.owner.token } })).json();
   const callback = await fetch(base + '/api/spotify/callback?' + new URLSearchParams({ state: start.attempt, code: 'owner' }), { redirect: 'manual' });
   assert.equal(callback.status, 302); assert.equal(callback.headers.get('referrer-policy'), 'no-referrer');
-  assert.equal(new URL(callback.headers.get('location')).searchParams.get('result'), 'connected');
+  const relay = new URL(callback.headers.get('location')).searchParams;
+  assert.equal(relay.get('result'), 'authorize'); assert.equal(f.spotify.settings(f.owner.user.id).connected, false);
+  const finish = await fetch(base + '/api/spotify/finish', { method: 'POST', headers: { Authorization: 'Bearer ' + f.owner.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ attempt: start.attempt, code: relay.get('code') }) });
+  assert.equal(finish.status, 200); assert.equal((await finish.json()).connected, true);
+});
+
+test('browser callbacks alone cannot link accounts or reveal codes through status; native confirmation rejects a different Loop session', async t => {
+  const f = await fixture(t), start = f.spotify.begin(f.listener.user.id, f.listener.token);
+  const relay = new URL(f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })).redirect).searchParams;
+  assert.equal(f.spotify.settings(f.listener.user.id).connected, false);
+  assert.equal(f.calls.length, 0);
+  assert.throws(() => f.spotify.callback(new URLSearchParams({ state: start.attempt, code: 'listener' })), /already received/);
+  await assert.rejects(f.spotify.finish(f.owner.user.id, f.owner.token, { attempt: start.attempt, code: relay.get('code') }), /another session/);
+  await assert.rejects(f.spotify.finish(f.listener.user.id, f.listener.token, { attempt: start.attempt, code: 'guessed-code' }), /another session/);
+  const complete = await f.spotify.finish(f.listener.user.id, f.listener.token, { attempt: start.attempt, code: relay.get('code') }); assert.equal(complete.connected, true);
 });

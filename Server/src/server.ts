@@ -54,7 +54,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       const url = new URL(req.url ?? '/', 'http://localhost');
       if (url.pathname === '/health' && req.method === 'GET') { json(res, 200, { status: 'ok', service: 'Loop Hub' }); return; }
       if (url.pathname === '/api/spotify/callback' && req.method === 'GET') {
-        const result = await spotify.callback(url.searchParams); hub.notifyAccountChange(result.userId);
+        const result = spotify.callback(url.searchParams);
         res.writeHead(302, { Location: result.redirect, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }); res.end(); return;
       }
       if (req.method === 'POST' && ['/api/auth/invite', '/api/auth/login'].includes(url.pathname)) {
@@ -71,6 +71,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       const token = bearer(req), user = auth.authenticate(token);
       if (url.pathname === '/api/spotify/settings' && req.method === 'GET') { json(res, 200, spotify.settings(user.id)); return; }
       if (url.pathname === '/api/spotify/connect' && req.method === 'POST') { json(res, 200, spotify.begin(user.id, token)); return; }
+      if (url.pathname === '/api/spotify/finish' && req.method === 'POST') { const result = await spotify.finish(user.id, token, await readJSON(req)); hub.notifyAccountChange(user.id); json(res, 200, result); return; }
       if (url.pathname === '/api/spotify/cancel' && req.method === 'POST') { spotify.cancel(user.id); json(res, 200, { success: true }); return; }
       if (url.pathname === '/api/spotify/disconnect' && req.method === 'POST') { const result = spotify.disconnect(user.id); hub.notifyAccountChange(user.id); json(res, 200, result); return; }
       if (url.pathname === '/api/spotify/sharing' && req.method === 'POST') { const body = await readJSON(req); const result = spotify.setSharing(user.id, body.enabled); hub.notifyAccountChange(user.id); json(res, 200, result); return; }

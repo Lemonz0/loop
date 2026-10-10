@@ -20,13 +20,13 @@ Users must be allowed to authenticate with the Spotify developer app. Developmen
 
 ## OAuth and credentials
 
-`POST /api/spotify/connect` starts server-held Authorization Code + PKCE with random state bound to the authenticated Loop session. The HTTPS callback exchanges the code on the server and reads the connected user's identity. It then returns only an outcome and attempt identifier to the native `ASWebAuthenticationSession` through `loop-spotify://callback`. Unknown, expired, replayed, logged-out, or canceled attempts cannot finish linking. A Spotify identity cannot be linked to two Loop accounts. Sharing is preserved only when reconnecting the same Spotify identity; a different identity starts private.
+`POST /api/spotify/connect` starts server-held Authorization Code + PKCE with random state bound to the authenticated Loop session. The HTTPS callback relays the short-lived authorization code and attempt identifier only to the native `ASWebAuthenticationSession` through `loop-spotify://callback`; it does not link the account. The native session validates its attempt and current Loop session, then makes an authenticated `/finish` request. Only that request exchanges the code on the server and reads the connected user's identity. Codes are not retained in status endpoints for other clients to poll or claim. Unknown, expired, replayed, logged-out, or canceled attempts cannot finish linking. A Spotify identity cannot be linked to two Loop accounts. Sharing is preserved only when reconnecting the same Spotify identity; a different identity starts private.
 
 Scopes: `user-read-private` for profile/subscription access and `user-read-playback-state` for current playback plus its private-session flag. Spotify tokens never enter the app, profile payloads, URL callbacks, analytics, or public Git history. Access and refresh tokens are encrypted with AES-256-GCM in the ignored `Server/data/spotify.json`; refresh-token rotation is persisted atomically.
 
 Authenticated endpoints:
 - `GET /api/spotify/settings`
-- `POST /api/spotify/connect`, `/cancel`, `/disconnect`, `/sharing`
+- `POST /api/spotify/connect`, `/finish`, `/cancel`, `/disconnect`, `/sharing`
 - `GET /api/spotify/users/:userId`
 
 The only public integration endpoint is `GET /api/spotify/callback`, which validates the pending OAuth state. Authentication errors do not disclose provider credentials. Native completion validates its attempt and the current Loop session before reporting success.

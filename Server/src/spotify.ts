@@ -7,7 +7,7 @@ import { ProfileStore } from './profiles.js';
 export interface SpotifyOptions { clientId?: string; redirectURI?: string; encryptionKey?: string; fetch?: typeof fetch }
 interface Account { accountId: string; displayName: string; profileURL: string; accessToken: string; refreshToken: string; expiresAt: number; sharing: boolean; reconnect: boolean; revision: string }
 interface Song { name: string; artists: string; album: string; artworkURL?: string; trackURL: string; durationMs: number; progressMs: number; observedAt: string; expiresAt: string }
-interface Pending { userId: string; loopToken: string; verifier: string; expiresAt: number; generation: number }
+interface Pending { userId: string; loopToken: string; verifier: string; expiresAt: number; generation: number; codeHash?: string }
 const scopes = ['user-read-private', 'user-read-playback-state'];
 function spotifyURL(value: unknown, prefix: string): string | undefined {
   if (typeof value !== 'string' || value.length > 2048) return undefined;
@@ -61,15 +61,32 @@ export class SpotifyStore {
     return { authorizationURL: authorization.href, attempt: state };
   }
   cancel(userId: string) { this.generations.set(userId, (this.generations.get(userId) ?? 0) + 1); for (const [state, pending] of this.pending) if (pending.userId === userId) this.pending.delete(state); }
-  async callback(query: URLSearchParams) {
-    const state = query.get('state') ?? '', pending = this.pending.get(state); this.pending.delete(state);
+  callback(query: URLSearchParams) {
+    const state = query.get('state') ?? '', pending = this.pending.get(state);
     if (!pending || pending.expiresAt <= this.now()) throw new ApiError(400, 'Spotify connection expired. Start again from Loop.');
-    let outcome = 'error';
+    if (pending.codeHash) throw new ApiError(400, 'Spotify callback was already received.');
+    const parameters = new URLSearchParams({ attempt: state });
+    try {
+      this.auth.authenticate(pending.loopToken);
+      const code = query.get('code');
+      if (query.get('error')) { parameters.set('result', 'denied'); this.pending.delete(state); }
+      else if (code && code.length <= 2048) {
+        pending.codeHash = createHash('sha256').update(code).digest('hex');
+        parameters.set('result', 'authorize'); parameters.set('code', code);
+      } else { parameters.set('result', 'error'); this.pending.delete(state); }
+    } catch { parameters.set('result', 'error'); this.pending.delete(state); }
+    // The authorization code is relayed only to the initiating native auth session. It is
+    // never exposed through a pollable endpoint or retained for another client to claim.
+    return { userId: pending.userId, redirect: 'loop-spotify://callback?' + parameters.toString() };
+  }
+  async finish(userId: string, loopToken: string, input: Record<string, unknown>) {
+    const state = typeof input.attempt === 'string' ? input.attempt : '', code = typeof input.code === 'string' ? input.code : '';
+    const pending = this.pending.get(state);
+    if (!pending || pending.userId !== userId || pending.loopToken !== loopToken || pending.expiresAt <= this.now() || !code || code.length > 2048 ||
+        pending.codeHash !== createHash('sha256').update(code).digest('hex')) throw new ApiError(400, 'Spotify connection expired or belongs to another session. Start again from Loop.');
+    this.pending.delete(state);
     try {
       if (this.auth.authenticate(pending.loopToken).id !== pending.userId) throw new Error('Session changed');
-      if (query.get('error')) outcome = 'denied';
-      else {
-        const code = query.get('code'); if (!code || code.length > 2048) throw new Error('Missing code');
         const token = await this.exchange(new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: this.options.redirectURI!, code_verifier: pending.verifier }));
         if (!token.refresh_token || !scopes.every(scope => token.scope?.split(' ').includes(scope))) throw new Error('Missing Spotify permissions');
         const response = await this.upstream('https://api.spotify.com/v1/me', { headers: { Authorization: 'Bearer ' + token.access_token }, signal: AbortSignal.timeout(10000), redirect: 'error' });
@@ -83,10 +100,9 @@ export class SpotifyStore {
         if (Object.entries(this.accounts).some(([id, account]) => id !== pending.userId && account.accountId === accountId)) throw new Error('Spotify is linked to another Loop account');
         this.save(accounts => { accounts[pending.userId] = { accountId, profileURL, displayName: typeof identity.display_name === 'string' ? identity.display_name : 'Spotify user',
           accessToken: token.access_token, refreshToken: token.refresh_token!, expiresAt: this.now() + token.expires_in * 1000, sharing: existing?.accountId === accountId ? existing.sharing : false, reconnect: false, revision: randomUUID() }; });
-        this.cache.delete(pending.userId); outcome = 'connected';
-      }
-    } catch { /* Only an outcome leaves this endpoint; OAuth errors and credentials stay private. */ }
-    return { userId: pending.userId, redirect: 'loop-spotify://callback?' + new URLSearchParams({ result: outcome, attempt: state }).toString() };
+        this.cache.delete(pending.userId);
+        return this.settings(userId);
+    } catch { throw new ApiError(400, 'Spotify could not connect. Check that your Spotify account is allowed in the developer app, then reconnect.'); }
   }
   private async exchange(parameters: URLSearchParams): Promise<{ access_token: string; refresh_token?: string; expires_in: number; scope?: string }> {
     if (this.now() < this.backoffUntil) throw new ApiError(429, 'Spotify is busy. Try again later.');

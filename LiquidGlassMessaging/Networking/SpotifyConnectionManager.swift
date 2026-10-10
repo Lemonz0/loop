@@ -38,7 +38,10 @@ final class SpotifyConnectionManager: NSObject, ASWebAuthenticationPresentationC
                   parts.queryItems?.first(where: { $0.name == "attempt" })?.value == authorization.attempt else { throw CancellationError() }
             let result = parts.queryItems?.first(where: { $0.name == "result" })?.value
             if result == "denied" { throw CancellationError() }
-            guard result == "connected" else { throw AccountHTTPError(status: 400, message: "Spotify could not connect. Check that your account is allowed in the Spotify developer app, then try again.") }
+            guard result == "authorize", let code = parts.queryItems?.first(where: { $0.name == "code" })?.value else { throw AccountHTTPError(status: 400, message: "Spotify could not connect. Check that your account is allowed in the Spotify developer app, then try again.") }
+            struct Finish: Encodable { let attempt: String; let code: String }
+            let linked: SpotifySettings = try await ProfileRepository.shared.request("api/spotify/finish", body: JSONEncoder().encode(Finish(attempt: authorization.attempt, code: code)))
+            guard linked.connected, auth.currentSession?.token == token, generation == attemptGeneration else { throw CancellationError() }
             ProfileRepository.shared.reset()
         } catch {
             if auth.currentSession?.token == token {
