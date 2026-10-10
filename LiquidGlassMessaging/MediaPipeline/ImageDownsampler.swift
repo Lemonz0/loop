@@ -30,11 +30,12 @@ public enum ImageDownsampler {
     public static func processImage(
         at sourceURL: URL,
         maxPixelDimension: CGFloat = 4096,
-        targetByteLimit: Int64 = MediaInspector.compressionTargetLimit
+        targetByteLimit: Int64 = MediaInspector.compressionTargetLimit,
+        forceJPEG: Bool = false
     ) async throws -> URL {
         let originalMetadata = try await MediaInspector.inspect(fileURL: sourceURL)
         
-        guard originalMetadata.needsCompression else {
+        guard forceJPEG || originalMetadata.byteSize > targetByteLimit else {
             return sourceURL
         }
         
@@ -64,7 +65,7 @@ public enum ImageDownsampler {
                 compressedData = uiImage.jpegData(compressionQuality: compression)
             }
             
-            guard let finalData = compressedData else {
+            guard let finalData = compressedData, Int64(finalData.count) <= targetByteLimit else {
                 throw ImageDownsampleError.failedToWriteData
             }
             

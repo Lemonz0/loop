@@ -47,6 +47,8 @@ final class CallConnection: NSObject, RTCPeerConnectionDelegate {
         self.peerID = peerID; self.callID = callID; self.owner = owner
         super.init()
         let config = RTCConfiguration(); config.sdpSemantics = .unifiedPlan; config.continualGatheringPolicy = .gatherContinually
+        // ICE prioritizes host/STUN pairs; relay candidates remain a fallback.
+        config.iceTransportPolicy = .all
         config.iceServers = servers.map { RTCIceServer(urlStrings: $0.urls, username: $0.username, credential: $0.credential) }
         guard let pc = media.factory.peerConnection(with: config, constraints: RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil), delegate: self) else { throw URLError(.cannotConnectToHost) }
         connection = pc

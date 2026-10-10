@@ -14,9 +14,11 @@ struct StoriesRow: View {
                             Image(systemName: "plus").font(.title3.weight(.semibold))
                                 .frame(width: 62, height: 62)
                                 .glassEffect(.regular.interactive(), in: Circle())
-                            Text("Your story").font(.caption.weight(.medium))
-                            Text("Add a moment").font(.caption2).foregroundStyle(theme.secondaryText)
+                                .frame(width: 70, height: 70)
+                            Text("Your story").font(.caption.weight(.medium)).lineLimit(1)
+                            Text("Add a moment").font(.caption2).foregroundStyle(theme.secondaryText).lineLimit(1)
                         }
+                        .frame(width: 76)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add your story")
@@ -25,11 +27,12 @@ struct StoriesRow: View {
                             VStack(spacing: 6) {
                                 CircleAvatar(user: story.user, size: 62)
                                     .padding(4)
+                                    .frame(width: 70, height: 70)
                                     .overlay {
                                         Circle().strokeBorder(story.isSeen ? AnyShapeStyle(Color.secondary) : AnyShapeStyle(LinearGradient(colors: theme.storyRingColors, startPoint: .topLeading, endPoint: .bottomTrailing)), lineWidth: 2.5)
                                     }
                                 Text(story.user.name).profileEntry(story.user.id, name: story.user.name, source: "stories").font(.caption.weight(.medium)).lineLimit(1)
-                                Text(story.createdAt, style: .relative).font(.caption2).foregroundStyle(theme.secondaryText)
+                                Text(story.createdAt, style: .relative).font(.caption2).foregroundStyle(theme.secondaryText).lineLimit(1)
                             }
                             .frame(width: 76)
                         }
@@ -40,6 +43,7 @@ struct StoriesRow: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 5)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

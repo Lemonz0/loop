@@ -150,6 +150,7 @@ public struct ChatRoomView: View {
         .photosPicker(isPresented: $isShowingWallpaperPicker, selection: $selectedWallpaperItem, matching: .images)
         #endif
         .onAppear {
+            if let index = chatStore.rooms.firstIndex(where: { $0.id == room.id }) { chatStore.rooms[index].unreadCount = 0 }
             if usesSharedDock { dockContext?.input = $inputText }
             withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.35)) { chatStore.activeRoom = room }
         }

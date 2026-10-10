@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { ProfileStore } from './profiles.js';
 import { ApiError, AuthStore } from './auth.js';
 import { serverLogger } from './logger.js';
+import { PushStore } from './push.js';
 
 interface ConnectedClient {
   ws: WebSocket;
@@ -27,7 +28,7 @@ export class WebSocketHub {
   private messagesFilePath = path.join(this.dataDir, 'messages.json');
   private themesFilePath = path.join(this.dataDir, 'themes.json');
 
-  constructor(private wss: WebSocketServer, private auth: AuthStore, dataDirectory?: string, private profiles?: ProfileStore) {
+  constructor(private wss: WebSocketServer, private auth: AuthStore, dataDirectory?: string, private profiles?: ProfileStore, private push?: PushStore) {
     if (dataDirectory) { this.dataDir = dataDirectory; this.messagesFilePath = path.join(dataDirectory, 'messages.json'); this.themesFilePath = path.join(dataDirectory, 'themes.json'); }
     const callsFile = path.join(this.dataDir, 'calls.json');
     if (fs.existsSync(callsFile)) this.calls = JSON.parse(fs.readFileSync(callsFile, 'utf8'));
@@ -288,6 +289,8 @@ export class WebSocketHub {
         if (this.auth.isDirectRoom(envelope.roomId)) { this.auth.activateDirectRoom(envelope.roomId); this.notifyCircleChange(envelope.roomId); }
 
         // Broadcast to all room participants
+        const recipients = this.auth.chatRooms(existingClient!.user.id).find(room => room.id === msg.roomId)?.participantIds.filter(id => id !== msg.senderId && this.canInteract(id, msg.roomId) && this.visibleHistory(id, msg.roomId).some(m => m.id === msg.id)) ?? [];
+        void this.push?.message(recipients, msg).catch(() => serverLogger.warn('PUSH_FAILED', 'Notification scheduling failed'));
         this.broadcastToRoom(envelope.roomId, {
           type: 'message_received',
           roomId: envelope.roomId,

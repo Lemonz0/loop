@@ -63,11 +63,17 @@ public final class WebRTCManager {
         callStatus = .outgoingCalling(roomId: roomId)
         do {
             try await prepare()
+            let call = activeCallId
+            guard call != nil else { return }
             try await CallKitManager.shared.startOutgoingCall(recipientName: roomName, hasVideo: isVideo)
+            guard activeCallId == call else { await CallKitManager.shared.endCall(); return }
             callStatus = .outgoingCalling(roomId: roomId)
             try await send(.offer)
             armTimeout()
-        } catch { lastError = error.localizedDescription; await hangup() }
+        } catch {
+            if error is CancellationError { return }
+            lastError = error.localizedDescription; await hangup()
+        }
     }
     public func answer() async { await CallKitManager.shared.answerCall() }
     public func acceptIncomingCall() async {

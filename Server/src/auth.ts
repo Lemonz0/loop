@@ -124,6 +124,7 @@ export class AuthStore {
       return { ...account.user };
     });
   }
+  hasActiveSession(userId: string, sessionHash: string) { return this.state.sessions.some(s => s.userId === userId && s.hash === sessionHash && s.expiresAt > this.now()); }
   logout(token: string) { this.commit(draft => { draft.sessions = draft.sessions.filter(s => s.hash !== digest(token)); }); }
   circlesFor(userId: string) { return this.state.circles.filter(c => c.memberIds.includes(userId)).map(c => ({ ...c, memberIds: [...c.memberIds] })); }
   createCircle(userId: string, name: unknown) {

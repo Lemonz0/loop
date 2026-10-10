@@ -63,3 +63,5 @@ Server/data/profiles.json.*.tmp
 Server/data/calls.json
 Server/data/spotify.json
 Server/data/spotify.json.*.tmp
+Server/data/push-devices.json
+Server/data/push-devices.json.tmp

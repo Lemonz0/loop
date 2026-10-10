@@ -10,6 +10,8 @@ import { AuthStore, ApiError } from './auth.js';
 import { ProfileStore } from './profiles.js';
 import { SpotifyStore, SpotifyOptions } from './spotify.js';
 import { serverLogger } from './logger.js';
+import { CallICEProvider, ICEOptions } from './callIce.js';
+import { PushStore, PushOptions } from './push.js';
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -40,7 +42,11 @@ function readJSON(req: http.IncomingMessage): Promise<Record<string, unknown>> {
     req.on('error', reject);
   });
 }
-export function createLoopServer(options: { dataDirectory?: string; bootstrapKey?: string; now?: () => number; spotify?: SpotifyOptions } = {}) {
+export function createLoopServer(options: { dataDirectory?: string; bootstrapKey?: string; now?: () => number; spotify?: SpotifyOptions; ice?: ICEOptions; push?: PushOptions } = {}) {
+  const ice = new CallICEProvider(options.ice ?? {
+    cloudflareKeyId: process.env.CLOUDFLARE_TURN_KEY_ID, cloudflareToken: process.env.CLOUDFLARE_TURN_API_TOKEN,
+    turnURL: process.env.TURN_URL, turnUsername: process.env.TURN_USERNAME, turnPassword: process.env.TURN_PASSWORD
+  });
   const auth = new AuthStore(options.dataDirectory ?? path.resolve(process.cwd(), 'data'), options.bootstrapKey ?? process.env.INVITE_KEY, options.now);
   const uploadsDirectory = options.dataDirectory ? path.join(options.dataDirectory, 'uploads') : undefined;
   const social = new SocialStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'), uploadsDirectory ?? path.resolve(process.cwd(), 'uploads'), options.now);
@@ -49,6 +55,9 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
     clientId: process.env.SPOTIFY_CLIENT_ID, redirectURI: process.env.SPOTIFY_REDIRECT_URI, encryptionKey: process.env.SPOTIFY_TOKEN_KEY
   }, options.now);
   const attempts = new Map<string, { count: number; expiresAt: number }>();
+  const push = new PushStore(auth, options.dataDirectory ?? path.resolve(process.cwd(), 'data'), options.push ?? {
+    keyId: process.env.APNS_KEY_ID, teamId: process.env.APNS_TEAM_ID, keyPath: process.env.APNS_KEY_PATH, topic: process.env.APNS_TOPIC
+  });
   const server = http.createServer((req, res) => {
     void (async () => {
       const url = new URL(req.url ?? '/', 'http://localhost');
@@ -69,6 +78,9 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
         json(res, 200, { success: true, session }); return;
       }
       const token = bearer(req), user = auth.authenticate(token);
+      if (url.pathname === '/api/push/status' && req.method === 'GET') { json(res, 200, { available: push.available }); return; }
+      if (url.pathname === '/api/push/register' && req.method === 'POST') { json(res, 200, push.register(user.id, token, await readJSON(req))); return; }
+      if (url.pathname === '/api/push/unregister' && req.method === 'POST') { push.unregister(token); json(res, 200, { success: true }); return; }
       if (url.pathname === '/api/spotify/settings' && req.method === 'GET') { json(res, 200, spotify.settings(user.id)); return; }
       if (url.pathname === '/api/spotify/connect' && req.method === 'POST') { json(res, 200, spotify.begin(user.id, token)); return; }
       if (url.pathname === '/api/spotify/finish' && req.method === 'POST') { const result = await spotify.finish(user.id, token, await readJSON(req)); hub.notifyAccountChange(user.id); json(res, 200, result); return; }
@@ -78,9 +90,13 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       const spotifyPresence = /^\/api\/spotify\/users\/([^/]+)$/.exec(url.pathname);
       if (spotifyPresence && req.method === 'GET') { json(res, 200, await spotify.presence(user.id, spotifyPresence[1])); return; }
       if (url.pathname === '/api/calls/ice' && req.method === 'GET') {
-        const servers: { urls: string[]; username?: string; credential?: string }[] = [{ urls: ['stun:stun.l.google.com:19302'] }];
-        if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) servers.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USERNAME, credential: process.env.TURN_PASSWORD });
-        json(res, 200, { servers }); return;
+        try { json(res, 200, { servers: await ice.servers() }); }
+        catch {
+          // A relay-provider outage must not prevent a same-Wi-Fi/direct call.
+          serverLogger.warn('TURN_UNAVAILABLE', 'Relay credentials unavailable; using direct ICE candidates');
+          json(res, 200, { servers: [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }] });
+        }
+        return;
       }
       if (url.pathname === '/api/profiles/settings' && req.method === 'GET') { json(res, 200, profiles.settings(user.id)); return; }
       if (url.pathname === '/api/profiles/requests' && req.method === 'GET') { json(res, 200, { users: profiles.requestsFor(user.id) }); return; }
@@ -104,7 +120,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
       if (url.pathname === '/api/auth/profile' && req.method === 'POST') { const profile = auth.updateProfile(user.id, await readJSON(req)); hub.notifyAccountChange(user.id); json(res, 200, { user: profile }); return; }
       const renameRoute = /^\/api\/circles\/([^/]+)\/rename$/.exec(url.pathname);
       if (renameRoute && req.method === 'POST') { const body = await readJSON(req); const circle = auth.renameCircle(user.id, renameRoute[1], body.name); hub.notifyCircleChange(circle.roomId); json(res, 200, { circle }); return; }
-      if (url.pathname === '/api/auth/logout' && req.method === 'POST') { spotify.cancel(user.id); auth.logout(token); json(res, 200, { success: true }); return; }
+      if (url.pathname === '/api/auth/logout' && req.method === 'POST') { spotify.cancel(user.id); push.unregister(token); auth.logout(token); json(res, 200, { success: true }); return; }
       if (url.pathname === '/api/chats' && req.method === 'GET') { json(res, 200, { rooms: auth.chatRooms(user.id) }); return; }
       if (url.pathname === '/api/chats/direct' && req.method === 'POST') { const body = await readJSON(req); if (typeof body.userId !== 'string' || !profiles.canContact(user.id, body.userId)) throw new ApiError(403, 'This account cannot be contacted'); const room = auth.directRoom(user.id, body.userId); hub.synchronizeRooms(); json(res, 200, { room }); return; }
       if (url.pathname === '/api/circles' && req.method === 'GET') { json(res, 200, { circles: auth.circlesFor(user.id) }); return; }
@@ -167,7 +183,7 @@ export function createLoopServer(options: { dataDirectory?: string; bootstrapKey
     });
   });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
-  const hub = new WebSocketHub(wss, auth, options.dataDirectory, profiles);
+  const hub = new WebSocketHub(wss, auth, options.dataDirectory, profiles, push);
   server.on('upgrade', (request, socket, head) => {
     if (wss.clients.size >= 1000) { socket.destroy(); return; }
     if (new URL(request.url ?? '/', 'http://localhost').pathname !== '/ws') { socket.destroy(); return; }

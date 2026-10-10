@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import AVFoundation
+import ImageIO
 
 /// Inspects file byte sizes, MIME types, video durations, and dimensions.
 public enum MediaInspector {
@@ -25,6 +26,14 @@ public enum MediaInspector {
         let mimeType = resourceValues.contentType?.preferredMIMEType ?? "application/octet-stream"
         
         let needsCompression = size > maxUploadByteLimit
+
+        if let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+           let height = properties[kCGImagePropertyPixelHeight] as? NSNumber {
+            return MediaMetadata(byteSize: size, mimeType: mimeType, durationSeconds: nil,
+                                 dimensions: CGSize(width: width.doubleValue, height: height.doubleValue), needsCompression: needsCompression)
+        }
         
         if mimeType.hasPrefix("video/") {
             let asset = AVURLAsset(url: fileURL)

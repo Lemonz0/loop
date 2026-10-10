@@ -91,15 +91,32 @@ public final class CallKitManager: NSObject, CXProviderDelegate {
     
     public nonisolated func providerDidReset(_ provider: CXProvider) {
         Task { @MainActor in
+            RTCAudioSession.sharedInstance().isAudioEnabled = false
             AudioSessionCoordinator.shared.stopAudioSession()
+            if let id = self.activeCallUUID { self.onCallEnded?(id) }
             self.activeCallUUID = nil
+        }
+    }
+
+    public nonisolated func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
+        Task { @MainActor in
+            do {
+                try AudioSessionCoordinator.shared.configureForCall()
+                self.activeCallUUID = action.callUUID
+                self.outgoing = true
+                provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: Date())
+                action.fulfill()
+            } catch {
+                action.fail()
+                self.onCallEnded?(action.callUUID)
+            }
         }
     }
     
     public nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         Task { @MainActor in
             do {
-                try AudioSessionCoordinator.shared.startAudioSession()
+                try AudioSessionCoordinator.shared.configureForCall()
                 action.fulfill()
                 self.onCallAnswered?(action.callUUID)
             } catch {
@@ -128,7 +145,7 @@ public final class CallKitManager: NSObject, CXProviderDelegate {
         Task { @MainActor in
             RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
             RTCAudioSession.sharedInstance().isAudioEnabled = true
-            try? AudioSessionCoordinator.shared.startAudioSession()
+            try? AudioSessionCoordinator.shared.configureForCall()
         }
     }
     

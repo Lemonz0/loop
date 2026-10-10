@@ -90,7 +90,7 @@ public struct HomeView: View {
                     .glassEffectTransition(reduceMotion ? SwiftUI.GlassEffectTransition.materialize : SwiftUI.GlassEffectTransition.matchedGeometry)
             } else {
                 HStack {
-                    Text("Loop").font(.system(size: titleSize, weight: .bold)).tracking(-0.8).transition(.opacity)
+                    Text("Loop").font(.system(size: titleSize, weight: .bold)).tracking(-0.8).fixedSize().transition(.opacity)
                     if model.isLive {
                         Menu {
                             ForEach(auth.circles) { circle in
@@ -103,7 +103,7 @@ public struct HomeView: View {
                         }.buttonStyle(.plain).glassEffect(.regular.interactive(), in: Capsule())
                             .disabled(model.isLoading || model.consentPending).transition(.opacity)
                     }
-                    Spacer()
+                    Spacer(minLength: 0)
                     HStack(spacing: 0) {
                         Button { openSearch() } label: {
                             Image(systemName: "magnifyingglass").frame(width: 44, height: 44)
@@ -121,7 +121,7 @@ public struct HomeView: View {
                             }
                         } label: { Image(systemName: "plus").font(.body.weight(.semibold)).frame(width: 44, height: 44) }
                             .accessibilityLabel("Create")
-                    }.buttonStyle(.plain).glassEffect(.regular.interactive(), in: Capsule())
+                    }.fixedSize().buttonStyle(.plain).glassEffect(.regular.interactive(), in: Capsule())
                         .glassEffectID("home-search", in: headerNamespace)
                         .glassEffectTransition(reduceMotion ? SwiftUI.GlassEffectTransition.materialize : SwiftUI.GlassEffectTransition.matchedGeometry)
                 }

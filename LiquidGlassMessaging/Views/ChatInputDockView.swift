@@ -81,7 +81,7 @@ public struct ChatInputDockView: View {
             }
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.8), value: composerPhase)
-        .alert("Voice message", isPresented: Binding(get: { recorder.error != nil || uploadManager.lastError != nil }, set: { if !$0 { recorder.error = nil; uploadManager.lastError = nil } })) { Button("OK") { recorder.error = nil; uploadManager.lastError = nil } } message: { Text(recorder.error ?? uploadManager.lastError ?? "") }
+        .alert("Send media", isPresented: Binding(get: { recorder.error != nil || uploadManager.lastError != nil }, set: { if !$0 { recorder.error = nil; uploadManager.lastError = nil } })) { Button("OK") { recorder.error = nil; uploadManager.lastError = nil } } message: { Text(recorder.error ?? uploadManager.lastError ?? "") }
         .onDisappear { voiceStartTask?.cancel(); recorder.cancel(); if !isSendingVoice && !uploadManager.isProcessing { discardVoice() } }
         .onChange(of: scenePhase) { _, phase in if phase == .background || (phase != .active && recorder.isRecording) { voiceStartTask?.cancel(); recorder.cancel() } }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in recorder.cancel() }
@@ -148,20 +148,22 @@ public struct ChatInputDockView: View {
         isSendingVoice = true
         Task {
             defer { isSendingVoice = false }
-            do { let attachment = try await uploadManager.uploadVoice(file: file, duration: draftDuration, serverURL: base); guard AuthSessionManager.shared.currentSession?.token == token else { discardVoice(); return }; onSendAttachment(attachment); discardVoice() }
+            do { let attachment = try await uploadManager.uploadVoice(file: file, duration: draftDuration, serverURL: base, roomID: room.id); guard AuthSessionManager.shared.currentSession?.token == token else { discardVoice(); return }; onSendAttachment(attachment); discardVoice() }
             catch { uploadManager.lastError = error.localizedDescription }
         }
     }
     private func handleSelectedMedia(_ item: PhotosPickerItem) {
         Task { @MainActor in
             do {
-                let serverURL = AppEnvironment.shared.serverBaseURL
+                guard let serverURL = AuthSessionManager.shared.savedServerURL else { throw URLError(.userAuthenticationRequired) }
                 let token = AuthSessionManager.shared.currentSession?.token
                 let attachment = try await uploadManager.processAndUpload(
                     item: item,
                     serverBaseURL: serverURL,
-                    authToken: token
+                    authToken: token,
+                    roomID: room.id
                 )
+                guard AuthSessionManager.shared.currentSession?.token == token else { return }
                 onSendAttachment(attachment)
                 selectedPhotosItem = nil
                 HapticFeedback.success()

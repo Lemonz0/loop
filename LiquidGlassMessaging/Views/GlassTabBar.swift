@@ -26,6 +26,15 @@ struct GlassTabBar: View {
         }
         .profilePresentationHost(dismissParentOnNavigate: false)
         .onChange(of: ProfilePresentation.shared.destination?.id) { _, id in if id != nil { selectedTab = .chats } }
+        .task(id: NotificationManager.shared.pendingRoomID) {
+            guard let id = NotificationManager.shared.pendingRoomID else { return }
+            await chatStore.refreshRooms()
+            guard NotificationManager.shared.pendingRoomID == id,
+                  let room = chatStore.rooms.first(where: { $0.id == id }) else { return }
+            selectedTab = .chats
+            ProfilePresentation.shared.destination = room
+            NotificationManager.shared.pendingRoomID = nil
+        }
         .environment(\.conversationDockContext, metrics)
         .environment(\.usesSharedConversationDock, true)
         .environment(\.conversationDockHeight, metrics.height)

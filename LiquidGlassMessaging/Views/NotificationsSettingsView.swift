@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 public struct NotificationsSettingsView: View {
     @Environment(\.appTheme) private var theme
+    @State private var notifications = NotificationManager.shared
     @AppStorage("settings_push_enabled") private var pushNotificationsEnabled: Bool = true
     @AppStorage("settings_in_app_sounds") private var inAppSoundsEnabled: Bool = true
     @AppStorage("settings_haptics_level") private var hapticLevel: String = "Spring Rigid"
@@ -28,10 +29,10 @@ public struct NotificationsSettingsView: View {
                                 // Push Notifications Card
                                 Toggle(isOn: $pushNotificationsEnabled) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Push Notifications")
+                                        Text("Message Notifications")
                                             .font(.system(size: 16, weight: .semibold, design: .rounded))
                                             .foregroundStyle(.primary)
-                                        Text("Instant alerts for new incoming circle messages.")
+                                        Text(notifications.status)
                                             .font(.system(size: 12))
                                             .foregroundStyle(theme.secondaryText)
                                     }
@@ -100,7 +101,7 @@ public struct NotificationsSettingsView: View {
                         Image(systemName: "lock.shield")
                             .font(.system(size: 15))
                             .foregroundStyle(theme.secondaryText)
-                        Text("Notifications and alerts are delivered with hardware end-to-end encryption preservation.")
+                        Text("Notification previews hide message contents. Background delivery requires a paid, push-enabled signing profile and server APNs setup. Free-signed installs receive alerts while Loop is running.")
                             .font(.system(size: 12))
                             .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -108,6 +109,8 @@ public struct NotificationsSettingsView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    Link("Open iOS notification settings", destination: URL(string: UIApplication.openNotificationSettingsURLString)!)
+                        .buttonStyle(.glass).frame(minHeight: 44)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -117,6 +120,9 @@ public struct NotificationsSettingsView: View {
         }
         .navigationTitle("Notifications & Sounds")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await notifications.configure() }
+        .onChange(of: pushNotificationsEnabled) { _, _ in Task { await notifications.configure() } }
+        .onChange(of: inAppSoundsEnabled) { _, _ in Task { await notifications.configure() } }
     }
 }
 

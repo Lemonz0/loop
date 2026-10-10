@@ -158,6 +158,12 @@ public final class ChatStore {
             if var message = envelope.message {
                 let currentUserId = AuthSessionManager.shared.currentSession?.user.id
                 message.isFromCurrentUser = (message.senderId == currentUserId)
+                let isNew = !(messagesByRoomId[message.roomId] ?? []).contains { $0.id == message.id }
+                if isNew {
+                    NotificationManager.shared.received(message)
+                    if !message.isFromCurrentUser, activeRoom?.id != message.roomId,
+                       let index = rooms.firstIndex(where: { $0.id == message.roomId }) { rooms[index].unreadCount += 1 }
+                }
                 AppLogger.shared.info(.network, "Received message from \(message.senderName)", metadata: ["roomId": message.roomId])
                 insertMessage(message)
             }

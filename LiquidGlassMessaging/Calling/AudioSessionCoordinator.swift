@@ -14,6 +14,14 @@ public final class AudioSessionCoordinator: @unchecked Sendable {
     }
     
     public func startAudioSession() throws {
+        try configureForCall()
+        #if os(iOS)
+        try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+        #endif
+    }
+
+    /// CallKit owns activation; configure the route before fulfilling its actions.
+    public func configureForCall() throws {
         #if os(iOS)
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(
@@ -22,7 +30,6 @@ public final class AudioSessionCoordinator: @unchecked Sendable {
             options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
         )
         try audioSession.setPreferredIOBufferDuration(0.005)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         #endif
         self.isConfigured = true
     }

@@ -67,8 +67,12 @@ private struct InlineImageCard: View {
                 .liquidGlassPill(specularIntensity: 0.5, strokeWidth: 1.0)
                 .padding(8)
         }
-        .frame(maxWidth: 280, maxHeight: 320)
+        .frame(width: 280, height: imageHeight)
         .clipShape(RoundedRectangle(cornerRadius: GlassTheme.bubbleRadius, style: .continuous))
+    }
+    private var imageHeight: CGFloat {
+        guard let width = attachment.width, let height = attachment.height, width > 0, height > 0 else { return 224 }
+        return CGFloat(min(320, max(100, 280 * height / width)))
     }
 }
 

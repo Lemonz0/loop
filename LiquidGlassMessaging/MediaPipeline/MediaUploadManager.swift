@@ -22,8 +22,10 @@ public final class MediaUploadManager {
     public func processAndUpload(
         item: PhotosPickerItem,
         serverBaseURL: URL,
-        authToken: String?
+        authToken: String?,
+        roomID: String
     ) async throws -> MediaAttachment {
+        guard !isProcessing else { throw URLError(.resourceUnavailable) }
         isProcessing = true
         uploadProgress = 0.0
         lastError = nil
@@ -32,18 +34,17 @@ public final class MediaUploadManager {
         processingStatus = "Inspecting media..."
         
         // 1. Determine media type and extract original file to disk
-        if let video = try? await item.loadTransferable(type: MovieTransferable.self) {
-            return try await handleVideoUpload(videoURL: video.url, serverBaseURL: serverBaseURL, authToken: authToken)
-        } else if let rawData = try? await item.loadTransferable(type: Data.self) {
-            return try await handleImageUpload(imageData: rawData, serverBaseURL: serverBaseURL, authToken: authToken)
-        } else {
-            throw URLError(.cannotDecodeContentData)
+        if item.supportedContentTypes.contains(where: { $0.conforms(to: .image) }) {
+            guard let data = try await item.loadTransferable(type: Data.self) else { throw URLError(.cannotDecodeContentData) }
+            return try await handleImageUpload(imageData: data, serverBaseURL: serverBaseURL, authToken: authToken, roomID: roomID)
         }
+        guard let video = try await item.loadTransferable(type: MovieTransferable.self) else { throw URLError(.cannotDecodeContentData) }
+        return try await handleVideoUpload(videoURL: video.url, serverBaseURL: serverBaseURL, authToken: authToken, roomID: roomID)
     }
     
     // MARK: - Video Pipeline
     
-    private func handleVideoUpload(videoURL: URL, serverBaseURL: URL, authToken: String?) async throws -> MediaAttachment {
+    private func handleVideoUpload(videoURL: URL, serverBaseURL: URL, authToken: String?, roomID: String) async throws -> MediaAttachment {
         processingStatus = "Checking video size..."
         let metadata = try await MediaInspector.inspect(fileURL: videoURL)
         
@@ -62,7 +63,7 @@ public final class MediaUploadManager {
         let finalMetadata = try await MediaInspector.inspect(fileURL: finalVideoURL)
         processingStatus = "Uploading (\(ByteCountFormatter.string(fromByteCount: finalMetadata.byteSize, countStyle: .file)))..."
         
-        let remoteURL = try await uploadFile(fileURL: finalVideoURL, mimeType: "video/mp4", serverBaseURL: serverBaseURL, authToken: authToken)
+        let remoteURL = try await uploadFile(fileURL: finalVideoURL, mimeType: "video/mp4", serverBaseURL: serverBaseURL, authToken: authToken, roomID: roomID)
         
         return MediaAttachment(
             fileName: finalVideoURL.lastPathComponent,
@@ -80,26 +81,22 @@ public final class MediaUploadManager {
     
     // MARK: - Image Pipeline
     
-    private func handleImageUpload(imageData: Data, serverBaseURL: URL, authToken: String?) async throws -> MediaAttachment {
+    private func handleImageUpload(imageData: Data, serverBaseURL: URL, authToken: String?, roomID: String) async throws -> MediaAttachment {
         let tempDir = FileManager.default.temporaryDirectory
         let tempSource = tempDir.appendingPathComponent("picked_\(UUID().uuidString).dat")
         try imageData.write(to: tempSource)
+        defer { try? FileManager.default.removeItem(at: tempSource) }
         
         processingStatus = "Inspecting image size..."
-        let metadata = try await MediaInspector.inspect(fileURL: tempSource)
-        
-        let finalImageURL: URL
-        if metadata.needsCompression {
-            processingStatus = "Downsampling image to stay within 150 MB..."
-            finalImageURL = try await ImageDownsampler.processImage(at: tempSource)
-        } else {
-            finalImageURL = tempSource
-        }
+        // Encode actual JPEG bytes; PhotosPicker may supply HEIC, PNG or RAW.
+        let finalImageURL = try await ImageDownsampler.processImage(at: tempSource, forceJPEG: true)
         
         let finalMetadata = try await MediaInspector.inspect(fileURL: finalImageURL)
         processingStatus = "Uploading image..."
         
-        let remoteURL = try await uploadFile(fileURL: finalImageURL, mimeType: "image/jpeg", serverBaseURL: serverBaseURL, authToken: authToken)
+        let remoteURL: URL
+        do { remoteURL = try await uploadFile(fileURL: finalImageURL, mimeType: "image/jpeg", serverBaseURL: serverBaseURL, authToken: authToken, roomID: roomID) }
+        catch { try? FileManager.default.removeItem(at: finalImageURL); throw error }
         
         return MediaAttachment(
             fileName: finalImageURL.lastPathComponent,
@@ -121,7 +118,8 @@ public final class MediaUploadManager {
         fileURL: URL,
         mimeType: String,
         serverBaseURL: URL,
-        authToken: String?
+        authToken: String?,
+        roomID: String? = nil
     ) async throws -> URL {
         let uploadEndpoint = serverBaseURL.appendingPathComponent("api/media/upload")
         var request = URLRequest(url: uploadEndpoint)
@@ -129,9 +127,9 @@ public final class MediaUploadManager {
         request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
         request.setValue(fileURL.lastPathComponent, forHTTPHeaderField: "X-File-Name")
         guard let authToken else { throw URLError(.userAuthenticationRequired) }
-        if let roomId = AppEnvironment.shared.chatStore.activeRoom?.id { request.setValue(roomId, forHTTPHeaderField: "X-Room-ID") }
-        if let roomId = AppEnvironment.shared.chatStore.activeRoom?.id,
-           let circle = AuthSessionManager.shared.circles.first(where: { $0.roomId == roomId }) {
+        if let roomID { request.setValue(roomID, forHTTPHeaderField: "X-Room-ID") }
+        if let roomID,
+           let circle = AuthSessionManager.shared.circles.first(where: { $0.roomId == roomID }) {
             request.setValue(circle.id, forHTTPHeaderField: "X-Circle-ID")
         }
         if !authToken.isEmpty {
@@ -139,8 +137,10 @@ public final class MediaUploadManager {
         }
         
         let (data, response) = try await URLSession.shared.upload(for: request, fromFile: fileURL)
-        guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
+        guard let httpResponse = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            struct Failure: Decodable { let errorMessage: String? }
+            throw AccountHTTPError(status: httpResponse.statusCode, message: (try? JSONDecoder().decode(Failure.self, from: data))?.errorMessage ?? "Media upload failed (\(httpResponse.statusCode)).")
         }
         
         struct UploadResponse: Codable {
@@ -153,11 +153,11 @@ public final class MediaUploadManager {
         throw URLError(.cannotParseResponse)
     }
     
-    public func uploadVoice(file: URL, duration: TimeInterval, serverURL: URL) async throws -> MediaAttachment {
+    public func uploadVoice(file: URL, duration: TimeInterval, serverURL: URL, roomID: String) async throws -> MediaAttachment {
         guard !isProcessing else { throw URLError(.resourceUnavailable) }
         isProcessing = true; processingStatus = "Uploading voice message…"; lastError = nil
         defer { isProcessing = false }
-        let remote = try await uploadFile(fileURL: file, mimeType: "audio/mp4", serverBaseURL: serverURL, authToken: AuthSessionManager.shared.currentSession?.token)
+        let remote = try await uploadFile(fileURL: file, mimeType: "audio/mp4", serverBaseURL: serverURL, authToken: AuthSessionManager.shared.currentSession?.token, roomID: roomID)
         let size = (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value ?? 0
         return MediaAttachment(fileName: file.lastPathComponent, mimeType: "audio/mp4", byteSize: size, remoteURL: remote, durationSeconds: duration, mediaType: .audio)
     }

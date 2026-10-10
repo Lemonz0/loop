@@ -141,6 +141,7 @@ public final class AuthSessionManager {
         privateMediaFiles.insert(file); return file
     }
     public func discardSession() {
+        NotificationManager.shared.reset()
         SpotifyConnectionManager.shared.cancel()
         ProfileRepository.shared.reset(); ProfilePresentation.shared.reset()
         for file in privateMediaFiles { try? FileManager.default.removeItem(at: file) }

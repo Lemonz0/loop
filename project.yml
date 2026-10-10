@@ -63,6 +63,8 @@ targets:
       - path: LiquidGlassMessaging/Models/SpotifyModels.swift
       - path: LiquidGlassMessaging/Networking/AccountHTTPClient.swift
       - path: Tests
+      - path: LiquidGlassMessaging/MediaPipeline/MediaInspector.swift
+      - path: LiquidGlassMessaging/MediaPipeline/ImageDownsampler.swift
     settings:
       SWIFT_VERSION: "5.9"
       GENERATE_INFOPLIST_FILE: YES
