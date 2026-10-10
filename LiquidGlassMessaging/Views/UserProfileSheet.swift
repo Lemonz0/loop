@@ -259,7 +259,7 @@ struct UserProfileSheet: View {
             defer { busy = false }
             guard let room = await store.openDirect(userID: userID) else { error = AuthSessionManager.shared.lastError ?? "Could not open chat"; AuthSessionManager.shared.lastError = nil; return }
             if let video { ProfilePresentation.shared.pendingCall = (room, video) }
-            else { ProfilePresentation.shared.pendingDestination = room }
+            else { ProfilePresentation.shared.pendingDestination = room; ProfilePresentation.shared.pendingMinimizeCall = context.source == "call_screen" }
             dismiss()
         }
     }

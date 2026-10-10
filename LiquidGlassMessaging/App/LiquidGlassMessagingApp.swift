@@ -32,7 +32,15 @@ public struct LiquidGlassMessagingAppView: View {
             .onChange(of: authManager.circles.map(\.roomId)) { _, _ in
                 if authManager.isAuthenticated { environment.activateSessionIfAvailable() }
             }
-            .fullScreenCover(isPresented: Binding(get: { callManager.callStatus != .idle && callManager.callStatus != .ended }, set: { if !$0 { Task { await callManager.hangup() } } })) { CallOverlayView().environment(\.appTheme, AppTheme(preset: themeManager.activePreset)).preferredColorScheme(AppTheme(preset: themeManager.activePreset).colorScheme).tint(AppTheme(preset: themeManager.activePreset).accent).interactiveDismissDisabled() }
+            .fullScreenCover(isPresented: Binding(get: { callManager.callStatus != .idle && callManager.callStatus != .ended && !ProfilePresentation.shared.minimizesCall }, set: { if !$0 && !ProfilePresentation.shared.minimizesCall { Task { await callManager.hangup() } } })) { CallOverlayView().environment(\.appTheme, AppTheme(preset: themeManager.activePreset)).preferredColorScheme(AppTheme(preset: themeManager.activePreset).colorScheme).tint(AppTheme(preset: themeManager.activePreset).accent).interactiveDismissDisabled() }
+            .onChange(of: callManager.callStatus) { _, status in
+                if status == .idle || status == .ended { ProfilePresentation.shared.minimizesCall = false }
+            }
+            .overlay(alignment: .topTrailing) {
+                if ProfilePresentation.shared.minimizesCall && callManager.callStatus != .idle && callManager.callStatus != .ended {
+                    CircleIconButton(symbol: "phone.fill", label: "Return to ongoing call") { ProfilePresentation.shared.minimizesCall = false }.padding(12)
+                }
+            }
             .alert("Call", isPresented: Binding(get: { callManager.lastError != nil }, set: { if !$0 { callManager.lastError = nil } })) { Button("OK") { callManager.lastError = nil } } message: { Text(callManager.lastError ?? "") }
             .onAppear {
                 ProMotionManager.shared.start()

@@ -16,6 +16,8 @@ final class ProfilePresentation {
     var destination: ChatRoom?
     var pendingDestination: ChatRoom?
     var pendingCall: (room: ChatRoom, video: Bool)?
+    var minimizesCall = false
+    var pendingMinimizeCall = false
     var navigationRevision = 0
     func open(_ request: ProfileRequest) {
         guard self.request == nil, !isDismissing else { return }
@@ -25,13 +27,13 @@ final class ProfilePresentation {
     }
     func finishedDismissal() {
         isDismissing = false
-        if let pendingDestination { self.pendingDestination = nil; destination = pendingDestination; navigationRevision += 1 }
+        if let pendingDestination { self.pendingDestination = nil; minimizesCall = pendingMinimizeCall; pendingMinimizeCall = false; destination = pendingDestination; navigationRevision += 1 }
         if let pendingCall {
             self.pendingCall = nil; navigationRevision += 1
             Task { await WebRTCManager.shared.startCall(roomId: pendingCall.room.id, roomName: pendingCall.room.name, isVideo: pendingCall.video) }
         }
     }
-    func reset() { request = nil; destination = nil; pendingDestination = nil; pendingCall = nil; isDismissing = false }
+    func reset() { request = nil; destination = nil; pendingDestination = nil; pendingCall = nil; minimizesCall = false; pendingMinimizeCall = false; isDismissing = false }
 }
 private struct ProfileHostKey: EnvironmentKey { static let defaultValue: UUID? = nil }
 private struct ProfileContextKey: EnvironmentKey { static let defaultValue = ProfileContext() }

@@ -6,7 +6,7 @@ Assumptions:
 - Notes, nicknames, contacts, mute, clear-chat position, and contact requests belong to the viewer. Disappearing messages use the shorter nonzero duration set by either participant.
 - The existing Profile tab remains the account editor. Bot, official, verified, and deactivated flags are server-managed and cannot be self-awarded in the editor.
 
-`UserProfileSheet` is the only full profile card. `profileEntry` adds identity tapping, accessible opening, a native zoom transition source, and a long-press quick peek. `ProfilePresentation` rejects overlapping requests across hosts. Each presented screen provides a `profilePresentationHost`; the main tab host retains navigation state. Message/call navigation waits for card dismissal. Root theme injection and regular native glass govern all surfaces; accessibility contrast/transparency preferences add native glass tint.
+`UserProfileSheet` is the only full profile card. `profileEntry` adds identity tapping, accessible opening, a native zoom transition source, and a long-press quick peek. `ProfilePresentation` rejects overlapping requests across hosts. Each presented screen provides a `profilePresentationHost`; the main tab host retains navigation state. Message/call navigation waits for card dismissal. Opening a chat from the call screen minimizes its overlay without disconnecting the call; a glass return-to-call control restores it. Root theme injection and regular native glass govern all surfaces; accessibility contrast/transparency preferences add native glass tint.
 
 Entry points:
 - Incoming chat avatars, group sender names, direct chat headers and direct chat-list identity labels.
