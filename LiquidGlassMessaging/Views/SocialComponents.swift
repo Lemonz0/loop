@@ -48,6 +48,7 @@ struct CircleAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .glassEffect(.regular.tint(theme.glassTint), in: Circle())
+        .frame(minWidth: opensProfile ? 44 : size, minHeight: opensProfile ? 44 : size)
         .profileEntry(user.id, name: user.name, enabled: opensProfile)
         .accessibilityHidden(!opensProfile)
     }

@@ -87,7 +87,7 @@ private struct ProfileEntryModifier: ViewModifier {
     }
     func body(content: Content) -> some View {
         if enabled {
-            content.contentShape(Rectangle()).frame(minWidth: 44, minHeight: 44)
+            content.contentShape(Rectangle())
                 .matchedTransitionSource(id: sourceID, in: namespace)
                 .highPriorityGesture(TapGesture().onEnded { open() })
                 .contextMenu { Button("Open profile", systemImage: "person.crop.circle") { open() } } preview: {
