@@ -32,9 +32,12 @@ struct CircleAvatar: View {
     let user: User
     var size: CGFloat = 40
     var opensProfile = true
+    var generic = false
     var body: some View {
         ZStack {
-            if let url = user.avatarURL {
+            if generic {
+                Image(systemName: "person.fill").font(.system(size: size * 0.4)).foregroundStyle(theme.secondaryText)
+            } else if let url = user.avatarURL {
                 CircleMediaView(media: CircleMedia(url: url), placeholderSymbol: "person.fill")
             } else {
                 Text(user.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased())

@@ -321,6 +321,7 @@ export class WebSocketHub {
         const sig = { ...envelope.callSignal, senderId: existingClient!.user.id, roomId: envelope.roomId };
         if (typeof sig.callId !== 'string' || sig.callId.length > 128 || typeof sig.isVideo !== 'boolean') { this.send(ws, { type: 'error', reason: 'Invalid call identity' }); return; }
         if (sig.targetId && !this.auth.canAccessRoom(sig.targetId, envelope.roomId)) { this.send(ws, { type: 'error', reason: 'Call target is not in this room' }); return; }
+        if (sig.targetId && this.profiles && !this.profiles.canContact(sig.senderId, sig.targetId)) { this.send(ws, { type: 'error', reason: 'Calling is restricted for this account' }); return; }
 
         serverLogger.info('CALL_SIGNAL', `Signaling event [${sig.signalType}] for call ${sig.callId}`, {
           clientId,
@@ -411,7 +412,8 @@ export class WebSocketHub {
   private broadcastToRoom(roomId: string, envelope: ServerMessageEnvelope, excludeWs?: WebSocket): void {
     const payload = JSON.stringify(envelope);
     for (const [ws, client] of this.clients.entries()) {
-      if (this.active(client) && ws !== excludeWs && client.joinedRooms.has(roomId) && this.auth.canAccessRoom(client.user.id, roomId) && ws.readyState === WebSocket.OPEN) {
+      if (this.active(client) && ws !== excludeWs && client.joinedRooms.has(roomId) && this.auth.canAccessRoom(client.user.id, roomId) && ws.readyState === WebSocket.OPEN &&
+          (!envelope.callSignal || !this.profiles || this.profiles.canContact(envelope.callSignal.senderId, client.user.id))) {
         ws.send(payload);
       }
     }

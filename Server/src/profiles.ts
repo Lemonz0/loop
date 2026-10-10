@@ -43,7 +43,7 @@ export class ProfileStore {
     // Mutual contacts only include identities in the viewer's circles. No global directory disclosure.
     const mutualContacts = restricted ? [] : Object.entries(this.state.personal[viewer] ?? {}).filter(([id, p]) => p.contact && this.personal(target, id).contact && this.auth.shareCircle(viewer, id)).map(([id]) => this.auth.socialUser(id));
     return { user, isSelf, state: deleted ? 'deleted' : blocked ? 'blocked' : privateProfile ? 'private' : 'active',
-      kind: d.kind ?? 'person', verified: !!d.verified, personal: deleted ? empty() : personal,
+      kind: restricted ? 'person' : d.kind ?? 'person', verified: !restricted && !!d.verified, personal: deleted ? empty() : personal,
       bio: restricted ? undefined : d.bio, pronouns: restricted ? undefined : d.pronouns, customStatus: restricted ? undefined : d.status,
       timeZone: !restricted && d.showLocalTime ? d.timeZone : undefined, memberSince: restricted ? undefined : identity.memberSince,
       presenceVisible: !restricted && this.canSeePresence(viewer, target), mutualGroups, mutualContacts,

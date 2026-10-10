@@ -111,6 +111,10 @@ test('replies and reactions resolve server identities; private clear and call hi
   await f.request(`/api/profiles/${id}/actions`, f.owner, { action: 'block', value: true });
   friend.ws.send(JSON.stringify({ type: 'call_signal', roomId: room.id, callSignal: { callId: 'call-two', signalType: 'offer', isVideo: false } }));
   assert.match((await friend.wait(e => e.type === 'error')).reason, /restricted/);
+  const group = f.auth.circlesFor(id)[0];
+  friend.ws.send(JSON.stringify({ type: 'call_signal', roomId: group.roomId, callSignal: { callId: 'blocked-group-call', signalType: 'offer', targetId: f.owner.user.id, isVideo: false } }));
+  assert.match((await friend.wait(e => e.type === 'error')).reason, /restricted/);
+  assert.equal((await f.request('/api/calls/history', f.owner)).data.calls.length, 1);
 });
 test('disappearing messages and their referenced media cannot be read or reacted to after expiry', async t => {
   const f = await fixture(t), id = f.friend.user.id;

@@ -87,7 +87,7 @@ struct UserProfileSheet: View {
         return VStack(spacing: 12) {
             HStack { Spacer(); if !card.isSelf && card.state == "active" { more(card) } }
             layout {
-                Button { track("avatar"); showAvatar = true } label: { CircleAvatar(user: card.avatarUser, size: groupLayout ? 88 : 104, opensProfile: false) }
+                Button { track("avatar"); showAvatar = true } label: { CircleAvatar(user: card.avatarUser, size: groupLayout ? 88 : 104, opensProfile: false, generic: card.state == "deleted") }
                     .buttonStyle(.plain).accessibilityLabel("View profile photo full screen").disabled(card.state == "deleted")
                 VStack(alignment: groupLayout ? .leading : .center, spacing: 10) {
                     HStack(spacing: 8) {
