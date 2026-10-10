@@ -155,7 +155,6 @@ public struct ChatInputDockView: View {
                     .glassEffect(reduceTransparency ? .regular.tint(theme.backgroundBase) : .regular.interactive(), in: Capsule())
                     .glassEffectID("message", in: dockNamespace)
                 }
-                .padding(.vertical, 2)
                 .padding(.horizontal, 16)
             }
         }

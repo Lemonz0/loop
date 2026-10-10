@@ -22,6 +22,7 @@ extension EnvironmentValues {
 @Observable @MainActor
 final class ConversationDockMetrics {
     var height: CGFloat = 60
+    var bottomOffset: CGFloat = 0
     var input: Binding<String>?
 }
 
@@ -39,10 +40,17 @@ struct ConversationDockMeasurement: UIViewControllerRepresentable {
         func measure() {
             guard let tabs = tabBarController, !tabs.isTabBarHidden else { return }
             let bar = tabs.tabBar
-            guard !bar.isHidden, bar.bounds.height > 0 else { return }
-            let height = max(44, bar.bounds.height - bar.safeAreaInsets.bottom)
-            guard abs(metrics.height - height) > 0.5 else { return }
-            Task { @MainActor [weak self] in self?.metrics.height = height }
+            guard !bar.isHidden, bar.bounds.height > 0, let window = bar.window else { return }
+            // The floating bar's bounds already describe its full height. Subtracting
+            // its safe area makes the replacement composer visibly shorter.
+            let height = max(44, bar.bounds.height)
+            let frame = bar.convert(bar.bounds, to: window)
+            let bottomOffset = frame.maxY - window.safeAreaLayoutGuide.layoutFrame.maxY
+            guard abs(metrics.height - height) > 0.5 || abs(metrics.bottomOffset - bottomOffset) > 0.5 else { return }
+            Task { @MainActor [weak self] in
+                self?.metrics.height = height
+                self?.metrics.bottomOffset = bottomOffset
+            }
         }
     }
 }

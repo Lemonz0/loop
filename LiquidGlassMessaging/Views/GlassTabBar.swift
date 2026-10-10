@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 /// System iOS 26 TabView owns the floating Liquid Glass tab bar.
 struct GlassTabBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var chatStore = AppEnvironment.shared.chatStore
     @State private var metrics = ConversationDockMetrics()
+    @State private var keyboardIsVisible = false
     private var activeRoom: ChatRoom? {
         guard let active = chatStore.activeRoom else { return nil }
         return chatStore.rooms.first(where: { $0.id == active.id }) ?? active
@@ -42,10 +44,12 @@ struct GlassTabBar: View {
                         chatStore.emitTyping(isTyping: typing, in: room)
                     })
                     .environment(\.conversationDockHeight, metrics.height)
-                    .padding(.bottom, 8)
+                    .offset(y: keyboardIsVisible ? 0 : metrics.bottomOffset)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardIsVisible = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardIsVisible = false }
         .animation(reduceMotion ? .easeInOut(duration: 0.15) : .smooth(duration: 0.35), value: activeRoom?.id)
         .sensoryFeedback(.success, trigger: model.feedback)
         .modifier(CircleErrorAlert(model: model))
