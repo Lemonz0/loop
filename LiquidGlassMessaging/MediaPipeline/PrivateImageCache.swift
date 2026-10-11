@@ -38,7 +38,14 @@ final class PrivateImageCache {
                 try? FileManager.default.removeItem(at: file)
                 throw CancellationError()
             }
-            guard let image = UIImage(contentsOfFile: file.path) else {
+            let decoded = await Task.detached(priority: .userInitiated) {
+                UIImage(contentsOfFile: file.path)
+            }.value
+            guard generation == attempt, loadIDs[url] == loadID, !Task.isCancelled else {
+                try? FileManager.default.removeItem(at: file)
+                throw CancellationError()
+            }
+            guard let image = decoded else {
                 try? FileManager.default.removeItem(at: file)
                 throw URLError(.cannotDecodeContentData)
             }
