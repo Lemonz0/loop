@@ -4,29 +4,23 @@ import UIKit
 @MainActor
 final class AvatarImageCacheTests: XCTestCase {
     private func photo() throws -> URL {
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { context in
-            UIColor.red.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
-        }
+        // Fixed 1px RGBA PNG avoids initializing UIKit's renderer in a hostless test process.
+        let data = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="))
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
-        try XCTUnwrap(image.pngData()).write(to: file)
+        try data.write(to: file)
         return file
     }
 
     func testCategoryRecreationUsesCachedImageAndNewURLLoadsNewPhoto() async throws {
-        print("Avatar cache: entering category recreation test")
         var downloads = 0
         let cache = AvatarImageCache { _ in
-            print("Avatar cache: creating image fixture")
             downloads += 1
             let file = try self.photo()
-            print("Avatar cache: image fixture ready")
             return file
         }
         defer { cache.reset() }
         let url = URL(string: "https://example.com/uploads/avatar.png")!
         let first = try await cache.image(for: url)
-        print("Avatar cache: first image loaded")
         XCTAssertTrue(cache.cachedImage(for: url) === first)
         let revisited = try await cache.image(for: url)
         XCTAssertTrue(revisited === first)
