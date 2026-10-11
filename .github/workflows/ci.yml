@@ -104,6 +104,10 @@ jobs:
             -project LiquidGlass.xcodeproj \
             -scheme ThemeContrast \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 30 \
+            -maximum-test-execution-time-allowance 60 \
             -resultBundlePath build/ThemeContrast.xcresult \
             CODE_SIGNING_ALLOWED=NO
 

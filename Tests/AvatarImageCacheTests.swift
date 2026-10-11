@@ -14,11 +14,19 @@ final class AvatarImageCacheTests: XCTestCase {
     }
 
     func testCategoryRecreationUsesCachedImageAndNewURLLoadsNewPhoto() async throws {
+        print("Avatar cache: entering category recreation test")
         var downloads = 0
-        let cache = AvatarImageCache { _ in downloads += 1; return try self.photo() }
+        let cache = AvatarImageCache { _ in
+            print("Avatar cache: creating image fixture")
+            downloads += 1
+            let file = try self.photo()
+            print("Avatar cache: image fixture ready")
+            return file
+        }
         defer { cache.reset() }
         let url = URL(string: "https://example.com/uploads/avatar.png")!
         let first = try await cache.image(for: url)
+        print("Avatar cache: first image loaded")
         XCTAssertTrue(cache.cachedImage(for: url) === first)
         let revisited = try await cache.image(for: url)
         XCTAssertTrue(revisited === first)
