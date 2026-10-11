@@ -141,6 +141,7 @@ public final class AuthSessionManager {
         privateMediaFiles.insert(file); return file
     }
     public func discardSession() {
+        AvatarImageCache.shared.reset()
         NotificationManager.shared.reset()
         SpotifyConnectionManager.shared.cancel()
         ProfileRepository.shared.reset(); ProfilePresentation.shared.reset()
@@ -170,4 +171,8 @@ public final class AuthSessionManager {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: keychainService, kSecAttrAccount as String: sessionKey]
         SecItemDelete(query as CFDictionary)
     }
+}
+
+extension AvatarImageCache {
+    static let shared = AvatarImageCache { try await AuthSessionManager.shared.mediaFile($0) }
 }

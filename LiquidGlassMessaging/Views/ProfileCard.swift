@@ -21,6 +21,7 @@ public struct ProfileCard: View {
     @State private var selectedAvatarItem: PhotosPickerItem? = nil
     #if canImport(UIKit)
     @State private var avatarImage: UIImage? = nil
+    @State private var avatarImageURL: URL?
     #endif
 
     public init() {}
@@ -81,10 +82,13 @@ public struct ProfileCard: View {
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .task(id: authManager.currentSession?.user.avatarURL) {
             #if canImport(UIKit)
-            avatarImage = nil; avatarLoading = true
+            avatarImage = nil; avatarImageURL = nil; avatarLoading = true
             defer { avatarLoading = false }
             if let remote = authManager.currentSession?.user.avatarURL,
-               let file = try? await authManager.mediaFile(remote), authManager.currentSession?.user.avatarURL == remote { avatarImage = UIImage(contentsOfFile: file.path) }
+               let image = try? await AvatarImageCache.shared.image(for: remote),
+               !Task.isCancelled, authManager.currentSession?.user.avatarURL == remote {
+                avatarImage = image; avatarImageURL = remote
+            }
             #endif
         }
         .alert("Profile", isPresented: Binding(get: { authManager.lastError != nil }, set: { if !$0 { authManager.lastError = nil } })) { Button("OK") { authManager.lastError = nil } } message: { Text(authManager.lastError ?? "") }
@@ -99,7 +103,8 @@ public struct ProfileCard: View {
         ZStack(alignment: .bottomTrailing) {
             // Main Avatar Circle
             #if canImport(UIKit)
-            if let avatar = avatarImage {
+            if let remote = authManager.currentSession?.user.avatarURL,
+               let avatar = AvatarImageCache.shared.cachedImage(for: remote) ?? (avatarImageURL == remote ? avatarImage : nil) {
                 Image(uiImage: avatar)
                     .resizable()
                     .scaledToFill()

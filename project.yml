@@ -65,6 +65,7 @@ targets:
       - path: Tests
       - path: LiquidGlassMessaging/MediaPipeline/MediaInspector.swift
       - path: LiquidGlassMessaging/MediaPipeline/ImageDownsampler.swift
+      - path: LiquidGlassMessaging/MediaPipeline/AvatarImageCache.swift
     settings:
       SWIFT_VERSION: "5.9"
       GENERATE_INFOPLIST_FILE: YES

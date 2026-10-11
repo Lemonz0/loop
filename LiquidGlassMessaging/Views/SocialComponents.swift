@@ -38,7 +38,7 @@ struct CircleAvatar: View {
             if generic {
                 Image(systemName: "person.fill").font(.system(size: size * 0.4)).foregroundStyle(theme.secondaryText)
             } else if let url = user.avatarURL {
-                CircleMediaView(media: CircleMedia(url: url), placeholderSymbol: "person.fill")
+                CircleMediaView(media: CircleMedia(url: url), placeholderSymbol: "person.fill", cachesAvatar: true)
             } else {
                 Text(user.name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased())
                     .font(.system(size: size * 0.4, weight: .medium))
@@ -59,6 +59,7 @@ struct CircleMediaView: View {
     let media: CircleMedia
     var placeholderSymbol = "photo"
     var contentMode: ContentMode = .fill
+    var cachesAvatar = false
     var body: some View {
         GeometryReader { geometry in
             Group {
@@ -79,7 +80,7 @@ struct CircleMediaView: View {
     private var remoteImage: some View {
         Group {
             if let url = media.url, url.host == nil || url.host == AuthSessionManager.shared.savedServerURL?.host {
-                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol, contentMode: contentMode)
+                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol, contentMode: contentMode, cachesAvatar: cachesAvatar)
             } else {
                 AsyncImage(url: media.url) { phase in
                     switch phase {
@@ -136,12 +137,17 @@ private struct PrivateSocialImage: View {
     let url: URL
     var placeholderSymbol = "photo.badge.exclamationmark"
     var contentMode: ContentMode = .fill
+    var cachesAvatar = false
+    @State private var loadedImage: UIImage?
+    @State private var loadedURL: URL?
     @State private var file: URL?
     @State private var failed = false
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let file, let image = UIImage(contentsOfFile: file.path) { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
+            if let image = cachesAvatar ? AvatarImageCache.shared.cachedImage(for: url) ?? (loadedURL == url ? loadedImage : nil) : file.flatMap({ UIImage(contentsOfFile: $0.path) }) {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
+            }
             else if failed { Image(systemName: placeholderSymbol).foregroundStyle(.primary) }
             else { ProgressView() }
             #else
@@ -150,8 +156,18 @@ private struct PrivateSocialImage: View {
         }
         .id(url)
         .task(id: url) {
-            file = nil; failed = false
-            do { let downloaded = try await AuthSessionManager.shared.mediaFile(url); try Task.checkCancellation(); file = downloaded }
+            file = nil; loadedImage = nil; loadedURL = nil; failed = false
+            do {
+                if cachesAvatar {
+                    let image = try await AvatarImageCache.shared.image(for: url)
+                    try Task.checkCancellation()
+                    loadedImage = image; loadedURL = url
+                } else {
+                    let downloaded = try await AuthSessionManager.shared.mediaFile(url)
+                    try Task.checkCancellation()
+                    file = downloaded
+                }
+            }
             catch is CancellationError {} catch { failed = true }
         }
     }
