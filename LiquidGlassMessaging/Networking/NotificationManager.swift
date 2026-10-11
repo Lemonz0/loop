@@ -32,11 +32,17 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                 remoteRegistered = false
                 center.removeAllPendingNotificationRequests(); center.removeAllDeliveredNotifications()
                 UIApplication.shared.unregisterForRemoteNotifications()
-                try await unregister()
                 status = "Notifications are off."
+                try? await unregister()
                 return
             }
-            guard permission == .authorized || permission == .provisional else { remoteRegistered = false; try await unregister(); status = "Allow notifications in iOS Settings."; return }
+            guard permission == .authorized || permission == .provisional else {
+                remoteRegistered = false
+                UIApplication.shared.unregisterForRemoteNotifications()
+                status = "Allow notifications in iOS Settings."
+                try? await unregister()
+                return
+            }
             guard let environment = pushEnvironment else { status = "Local alerts enabled. This signing profile does not support background push."; return }
             let auth = AuthSessionManager.shared
             guard let token = auth.currentSession?.token, let base = auth.savedServerURL else { return }
