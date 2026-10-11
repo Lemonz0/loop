@@ -3,7 +3,7 @@ import XCTest
 final class MediaImageTests: XCTestCase {
     func testPNGIsNormalizedToJPEGWithDimensions() async throws {
         // Fixed 120x80 RGBA PNG avoids UIKit renderer initialization in hostless CI.
-        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAADSm7GJAAAAz0lEQVR4nO3RwQkAIADEsNt/aR1DqHnkX+jOduja6wAMxmAM/pTBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRx3Ae4UuVddJmojAAAAAElFTkSuQmCC"))
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAYAAADSm7GJAAAAz0lEQVR4nO3RwQkAIADEsNt/aR1DqHnkX+jOduja6wAMxmAM/pTBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRxncJzBcQbHGRx3Ae4UuVddJmojAAAAAElFTkSuQmCC"))
         let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".dat")
         try png.write(to: source)
         defer { try? FileManager.default.removeItem(at: source) }
