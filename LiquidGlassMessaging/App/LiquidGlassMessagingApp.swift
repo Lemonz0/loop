@@ -8,6 +8,8 @@ public struct LiquidGlassMessagingAppView: View {
     @State private var authManager = AuthSessionManager.shared
     @State private var callManager = WebRTCManager.shared
     @State private var themeManager = ThemeManager.shared
+    @State private var callErrorPresented = false
+    @State private var callOverlayVisible = false
     
     public init() {}
     
@@ -36,7 +38,10 @@ public struct LiquidGlassMessagingAppView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active, authManager.isAuthenticated { Task { await NotificationManager.shared.configure() } }
             }
-            .fullScreenCover(isPresented: Binding(get: { callManager.callStatus != .idle && callManager.callStatus != .ended && !ProfilePresentation.shared.minimizesCall }, set: { if !$0 && !ProfilePresentation.shared.minimizesCall { Task { await callManager.hangup() } } })) { CallOverlayView().environment(\.appTheme, AppTheme(preset: themeManager.activePreset)).preferredColorScheme(AppTheme(preset: themeManager.activePreset).colorScheme).tint(AppTheme(preset: themeManager.activePreset).accent).interactiveDismissDisabled() }
+            .fullScreenCover(isPresented: Binding(get: { callManager.callStatus != .idle && callManager.callStatus != .ended && !ProfilePresentation.shared.minimizesCall }, set: { if !$0 && !ProfilePresentation.shared.minimizesCall { Task { await callManager.hangup() } } }), onDismiss: {
+                callOverlayVisible = false
+                callErrorPresented = callManager.lastError != nil
+            }) { CallOverlayView().environment(\.appTheme, AppTheme(preset: themeManager.activePreset)).preferredColorScheme(AppTheme(preset: themeManager.activePreset).colorScheme).tint(AppTheme(preset: themeManager.activePreset).accent).interactiveDismissDisabled().onAppear { callOverlayVisible = true } }
             .onChange(of: callManager.callStatus) { _, status in
                 if status == .idle || status == .ended { ProfilePresentation.shared.minimizesCall = false }
             }
@@ -45,7 +50,11 @@ public struct LiquidGlassMessagingAppView: View {
                     CircleIconButton(symbol: "phone.fill", label: "Return to ongoing call") { ProfilePresentation.shared.minimizesCall = false }.padding(12)
                 }
             }
-            .alert("Call", isPresented: Binding(get: { callManager.lastError != nil }, set: { if !$0 { callManager.lastError = nil } })) { Button("OK") { callManager.lastError = nil } } message: { Text(callManager.lastError ?? "") }
+            .onChange(of: callManager.lastError) { _, error in
+                if error == nil { callErrorPresented = false }
+                else if !callOverlayVisible && (callManager.callStatus == .idle || ProfilePresentation.shared.minimizesCall) { callErrorPresented = true }
+            }
+            .alert("Call", isPresented: $callErrorPresented) { Button("OK") { callManager.lastError = nil } } message: { Text(callManager.lastError ?? "") }
             .onAppear {
                 ProMotionManager.shared.start()
             }

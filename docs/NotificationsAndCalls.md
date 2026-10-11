@@ -66,6 +66,12 @@ push is not implemented by message APNs support**. Validate microphone/camera,
 incoming/outgoing audio, speaker, hangup, same-Wi-Fi and Wi-Fi-to-cellular media on
 two devices. CI compilation cannot certify real network connectivity.
 
+The app declares `audio` and `voip` in `UIBackgroundModes`; CallKit can reject
+outgoing transactions as unentitled when `voip` is missing. CI checks these modes
+and the camera/microphone privacy descriptions in the archived app. Setup errors
+appear after the call overlay dismisses, and the in-app console records setup
+stages and error domain/code without logging TURN credentials.
+
 ## Media and compact layout checks
 
 Photo intake selects image representations first (including Live Photos), encodes

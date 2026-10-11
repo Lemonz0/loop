@@ -11,4 +11,5 @@
     <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>Loop Spotify callback</string><key>CFBundleURLSchemes</key><array><string>loop-spotify</string></array></dict></array>
     <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
     <key>NSLocalNetworkUsageDescription</key><string>Loop connects to your private server on the same Wi-Fi for accounts, chats, and media.</string>
+    <key>UIBackgroundModes</key><array><string>audio</string><string>voip</string></array>
 </dict></plist>

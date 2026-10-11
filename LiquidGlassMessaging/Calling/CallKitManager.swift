@@ -18,6 +18,7 @@ public final class CallKitManager: NSObject, CXProviderDelegate {
     public private(set) var activeCallUUID: UUID?
     public var onCallAnswered: ((UUID) -> Void)?
     public var onCallEnded: ((UUID) -> Void)?
+    public var onCallFailed: ((Error) -> Void)?
     public var onMuteToggled: ((UUID, Bool) -> Void)?
     
     override private init() {
@@ -108,7 +109,7 @@ public final class CallKitManager: NSObject, CXProviderDelegate {
                 action.fulfill()
             } catch {
                 action.fail()
-                self.onCallEnded?(action.callUUID)
+                self.onCallFailed?(error)
             }
         }
     }
@@ -121,6 +122,7 @@ public final class CallKitManager: NSObject, CXProviderDelegate {
                 self.onCallAnswered?(action.callUUID)
             } catch {
                 action.fail()
+                self.onCallFailed?(error)
             }
         }
     }
@@ -164,6 +166,7 @@ public final class CallKitManager {
     public private(set) var activeCallUUID: UUID?
     public var onCallAnswered: ((UUID) -> Void)?
     public var onCallEnded: ((UUID) -> Void)?
+    public var onCallFailed: ((Error) -> Void)?
     public var onMuteToggled: ((UUID, Bool) -> Void)?
     
     private init() {}

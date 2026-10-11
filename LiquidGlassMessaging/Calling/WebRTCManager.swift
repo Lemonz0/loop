@@ -36,17 +36,25 @@ public final class WebRTCManager {
     private var timeout: Task<Void, Never>?
     private var userID: String { AuthSessionManager.shared.currentSession?.user.id ?? "" }
     public init() {
+        CallKitManager.shared.onCallFailed = { [weak self] error in
+            self?.lastError = "System call setup failed: \(error.localizedDescription)"
+            Task { await self?.hangup() }
+        }
         CallKitManager.shared.onCallAnswered = { [weak self] _ in Task { await self?.acceptIncomingCall() } }
         CallKitManager.shared.onCallEnded = { [weak self] _ in Task { await self?.hangup() } }
         CallKitManager.shared.onMuteToggled = { [weak self] _, muted in self?.isMicMuted = muted; self?.media?.audio.isEnabled = !muted }
     }
     private func prepare() async throws {
         let preparingCall = activeCallId
+        AppLogger.shared.info(.calling, "Checking call permissions")
         guard await AVAudioApplication.requestRecordPermission() else { throw CallError.message("Allow microphone access in Settings.") }
         if videoCall, !(await AVCaptureDevice.requestAccess(for: .video)) { throw CallError.message("Allow camera access in Settings.") }
         guard let token = AuthSessionManager.shared.currentSession?.token, let base = AuthSessionManager.shared.savedServerURL else { throw URLError(.userAuthenticationRequired) }
         struct ICE: Decodable, Sendable { let servers: [CallICEServer] }
+        AppLogger.shared.info(.calling, "Loading call connection servers")
         servers = try await AccountHTTPClient.shared.request("api/calls/ice", baseURL: base, token: token, as: ICE.self).servers
+        let hasRelay = servers.contains { $0.urls.contains { $0.hasPrefix("turn:") || $0.hasPrefix("turns:") } }
+        AppLogger.shared.info(.calling, "Call connection servers loaded", metadata: ["relayAvailable": String(hasRelay)])
         guard activeCallId == preparingCall else { throw CancellationError() }
         let local = CallMedia(videoEnabled: videoCall)
         media = local; localVideo = local.video; isCameraEnabled = videoCall; local.audio.isEnabled = !isMicMuted
@@ -58,6 +66,7 @@ public final class WebRTCManager {
         guard case .connected = AppEnvironment.shared.chatStore.connectionState else { lastError = "Connect to the server before calling."; return }
         VoiceRecorder.shared.cancel()
         preparing = true; defer { preparing = false }
+        lastError = nil
         isMicMuted = false
         activeCallId = UUID().uuidString; activeRoomId = roomId; inviterID = userID; videoCall = isVideo
         callStatus = .outgoingCalling(roomId: roomId)
@@ -65,6 +74,7 @@ public final class WebRTCManager {
             try await prepare()
             let call = activeCallId
             guard call != nil else { return }
+            AppLogger.shared.info(.calling, "Starting system call")
             try await CallKitManager.shared.startOutgoingCall(recipientName: roomName, hasVideo: isVideo)
             guard activeCallId == call else { await CallKitManager.shared.endCall(); return }
             callStatus = .outgoingCalling(roomId: roomId)
@@ -72,6 +82,8 @@ public final class WebRTCManager {
             armTimeout()
         } catch {
             if error is CancellationError { return }
+            let detail = error as NSError
+            AppLogger.shared.error(.calling, "Outgoing call setup failed", metadata: ["domain": detail.domain, "code": String(detail.code)])
             lastError = error.localizedDescription; await hangup()
         }
     }
