@@ -60,6 +60,7 @@ struct CircleMediaView: View {
     var placeholderSymbol = "photo"
     var contentMode: ContentMode = .fill
     var cachesAvatar = false
+    var cachesPost = false
     var body: some View {
         GeometryReader { geometry in
             Group {
@@ -80,7 +81,7 @@ struct CircleMediaView: View {
     private var remoteImage: some View {
         Group {
             if let url = media.url, url.host == nil || url.host == AuthSessionManager.shared.savedServerURL?.host {
-                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol, contentMode: contentMode, cachesAvatar: cachesAvatar)
+                PrivateSocialImage(url: url, placeholderSymbol: placeholderSymbol, contentMode: contentMode, cache: cachesAvatar ? .avatars : cachesPost ? .posts : nil)
             } else {
                 AsyncImage(url: media.url) { phase in
                     switch phase {
@@ -137,7 +138,7 @@ private struct PrivateSocialImage: View {
     let url: URL
     var placeholderSymbol = "photo.badge.exclamationmark"
     var contentMode: ContentMode = .fill
-    var cachesAvatar = false
+    var cache: PrivateImageCache?
     @State private var loadedImage: UIImage?
     @State private var loadedURL: URL?
     @State private var file: URL?
@@ -145,7 +146,7 @@ private struct PrivateSocialImage: View {
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let image = cachesAvatar ? AvatarImageCache.shared.cachedImage(for: url) ?? (loadedURL == url ? loadedImage : nil) : file.flatMap({ UIImage(contentsOfFile: $0.path) }) {
+            if let image = cache != nil ? cache?.cachedImage(for: url) ?? (loadedURL == url ? loadedImage : nil) : file.flatMap({ UIImage(contentsOfFile: $0.path) }) {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
             }
             else if failed { Image(systemName: placeholderSymbol).foregroundStyle(.primary) }
@@ -158,8 +159,8 @@ private struct PrivateSocialImage: View {
         .task(id: url) {
             file = nil; loadedImage = nil; loadedURL = nil; failed = false
             do {
-                if cachesAvatar {
-                    let image = try await AvatarImageCache.shared.image(for: url)
+                if let cache {
+                    let image = try await cache.image(for: url)
                     try Task.checkCancellation()
                     loadedImage = image; loadedURL = url
                 } else {

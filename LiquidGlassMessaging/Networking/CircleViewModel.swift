@@ -33,6 +33,7 @@ public final class CircleViewModel {
         guard isLive, let session = AuthSessionManager.shared.currentSession,
               let url = AuthSessionManager.shared.savedServerURL else { return }
         generation += 1; pendingIDs.removeAll(); currentCircleID = circleID; hasLoaded = false; isLoading = false
+        PrivateImageCache.posts.reset()
         snapshot = CircleSnapshot(friends: [], posts: [], stories: [], trollPosts: [])
         repository = RemoteFeedRepository(token: session.token, baseURL: url, circleID: circleID, userID: currentUserID)
         await refresh()
@@ -53,6 +54,7 @@ public final class CircleViewModel {
             let pending = snapshot.posts.filter { pendingIDs.contains($0.id) }
             snapshot = fetched
             for post in pending { if let i = snapshot.posts.firstIndex(where: { $0.id == post.id }) { snapshot.posts[i] = post } }; hasLoaded = true
+            prunePostImages()
             allowTrollPosts = snapshot.friends.first(where: { $0.id == currentUserID })?.allowsTrollPosts ?? false
         } catch {
             guard generation == attempt, !Task.isCancelled, !AccountHTTPClient.isCancellation(error) else { return }
@@ -68,7 +70,10 @@ public final class CircleViewModel {
             guard attempt == generation else { return }
             allowTrollPosts = allowed
             UserDefaults.standard.set(allowed, forKey: "circle_allow_troll_posts")
-            snapshot = try await repository.fetch()
+            let fetched = try await repository.fetch()
+            guard attempt == generation else { return }
+            snapshot = fetched
+            prunePostImages()
         } catch { errorMessage = error.localizedDescription }
     }
     public func like(_ post: Post) async {
@@ -117,7 +122,7 @@ public final class CircleViewModel {
         guard post.author.id == currentUserID, !pendingIDs.contains(post.id) else { return }
         pendingIDs.insert(post.id); mutationRevision += 1
         defer { if attempt == generation { pendingIDs.remove(post.id); mutationRevision += 1 } }
-        do { try await repository.deletePost(id: post.id); guard attempt == generation else { return }; snapshot.posts.removeAll { $0.id == post.id } }
+        do { try await repository.deletePost(id: post.id); guard attempt == generation else { return }; snapshot.posts.removeAll { $0.id == post.id }; prunePostImages() }
         catch { if attempt == generation { handleError(error) } }
     }
     public func react(_ post: TrollPost) async {
@@ -136,6 +141,7 @@ public final class CircleViewModel {
             try await repository.reportTroll(id: post.id, reason: reason)
             guard attempt == generation else { return }
             snapshot.trollPosts.removeAll { $0.id == post.id }
+            prunePostImages()
         } catch { errorMessage = error.localizedDescription }
     }
     public func publish(media: CircleMedia, caption: String, kind: CircleComposerKind, subjects: Set<String>) async -> Bool {
@@ -154,6 +160,12 @@ public final class CircleViewModel {
             }
             feedback += 1; return true
         } catch { if attempt == generation { handleError(error) }; return false }
+    }
+
+    private func prunePostImages() {
+        guard isLive else { return }
+        let urls = snapshot.posts.flatMap { $0.media.compactMap(\.url) } + snapshot.trollPosts.compactMap(\.imageURL)
+        PrivateImageCache.posts.retainOnly(Set(urls))
     }
 }
 

@@ -37,7 +37,13 @@ opaque routing IDs; no message text or sender names. Neither credentials nor
 device tokens should be committed. Permission/enable/sound changes synchronize on
 foreground entry. Server credentials are not configured by default.
 
+Notification settings include a **Send test notification** button. It requests or
+refreshes iOS permission, sends a generic local alert, and reports disabled or
+denied permissions inline. A successful local test does not certify APNs delivery;
+the registration status above the button reports the background push setup.
+
 ## Cloudflare TURN and direct calling
+
 
 Set these in the ignored `Server/.env` and restart the backend:
 

@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 public struct NotificationsSettingsView: View {
     @Environment(\.appTheme) private var theme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var notifications = NotificationManager.shared
     @AppStorage("settings_push_enabled") private var pushNotificationsEnabled: Bool = true
     @AppStorage("settings_in_app_sounds") private var inAppSoundsEnabled: Bool = true
@@ -40,6 +41,20 @@ public struct NotificationsSettingsView: View {
                                 .tint(theme.accent)
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 16)
+                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Button("Send test notification", systemImage: "bell.badge") {
+                                        Task { await notifications.sendTestAlert() }
+                                    }
+                                    .buttonStyle(.glass).frame(minHeight: 44)
+                                    .disabled(notifications.isSendingTest || !pushNotificationsEnabled)
+                                    if let result = notifications.testStatus {
+                                        Text(result).font(.footnote).foregroundStyle(theme.secondaryText)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(18)
                                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
                                 // In-App Audio Chimes Card
@@ -123,14 +138,19 @@ public struct NotificationsSettingsView: View {
         .task { await notifications.configure() }
         .onChange(of: pushNotificationsEnabled) { _, _ in Task { await notifications.configure() } }
         .onChange(of: inAppSoundsEnabled) { _, _ in Task { await notifications.configure() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await notifications.refreshPermission() } }
+        }
     }
 }
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Notifications · dark") {
     NavigationStack {
         NotificationsSettingsView()
-    }
+    }.circlePreviewTheme(.aurora)
 
 }
+
+#Preview("Notifications · light") { NavigationStack { NotificationsSettingsView() }.circlePreviewTheme(.daylight) }

@@ -27,7 +27,7 @@ struct PostPhotoViewer: View {
             } else {
                 TabView(selection: $index) {
                     ForEach(Array(selection.media.enumerated()), id: \.offset) { position, media in
-                        CircleMediaView(media: media, contentMode: .fit)
+                        CircleMediaView(media: media, contentMode: .fit, cachesPost: true)
                             .tag(position)
                             .accessibilityLabel("Photo \(position + 1) of \(selection.media.count) by \(selection.authorName)")
                     }

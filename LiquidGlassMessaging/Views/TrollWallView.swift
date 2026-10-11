@@ -74,7 +74,7 @@ private struct TrollTile: View {
     @Bindable var model: CircleViewModel
     @State private var showReport = false
     var body: some View {
-        CircleMediaView(media: CircleMedia(url: post.imageURL, imageData: post.imageData))
+        CircleMediaView(media: CircleMedia(url: post.imageURL, imageData: post.imageData), cachesPost: true)
             .aspectRatio(post.aspectRatio, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(alignment: .bottomLeading) {

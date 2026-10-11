@@ -141,7 +141,8 @@ public final class AuthSessionManager {
         privateMediaFiles.insert(file); return file
     }
     public func discardSession() {
-        AvatarImageCache.shared.reset()
+        PrivateImageCache.avatars.reset()
+        PrivateImageCache.posts.reset()
         NotificationManager.shared.reset()
         SpotifyConnectionManager.shared.cancel()
         ProfileRepository.shared.reset(); ProfilePresentation.shared.reset()
@@ -173,6 +174,7 @@ public final class AuthSessionManager {
     }
 }
 
-extension AvatarImageCache {
-    static let shared = AvatarImageCache { try await AuthSessionManager.shared.mediaFile($0) }
+extension PrivateImageCache {
+    static let avatars = PrivateImageCache { try await AuthSessionManager.shared.mediaFile($0) }
+    static let posts = PrivateImageCache { try await AuthSessionManager.shared.mediaFile($0) }
 }

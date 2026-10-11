@@ -85,7 +85,7 @@ public struct ProfileCard: View {
             avatarImage = nil; avatarImageURL = nil; avatarLoading = true
             defer { avatarLoading = false }
             if let remote = authManager.currentSession?.user.avatarURL,
-               let image = try? await AvatarImageCache.shared.image(for: remote),
+               let image = try? await PrivateImageCache.avatars.image(for: remote),
                !Task.isCancelled, authManager.currentSession?.user.avatarURL == remote {
                 avatarImage = image; avatarImageURL = remote
             }
@@ -104,7 +104,7 @@ public struct ProfileCard: View {
             // Main Avatar Circle
             #if canImport(UIKit)
             if let remote = authManager.currentSession?.user.avatarURL,
-               let avatar = AvatarImageCache.shared.cachedImage(for: remote) ?? (avatarImageURL == remote ? avatarImage : nil) {
+               let avatar = PrivateImageCache.avatars.cachedImage(for: remote) ?? (avatarImageURL == remote ? avatarImage : nil) {
                 Image(uiImage: avatar)
                     .resizable()
                     .scaledToFill()

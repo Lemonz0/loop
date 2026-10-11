@@ -9,6 +9,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private(set) var permission: UNAuthorizationStatus = .notDetermined
     private(set) var remoteRegistered = false
     private(set) var status = "Alerts while Loop is running."
+    private(set) var testStatus: String?
+    private(set) var isSendingTest = false
     var pendingRoomID: String?
     var pendingUserID: String?
     private var deviceToken: String?
@@ -71,6 +73,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         _ = try await AccountHTTPClient.shared.request("api/push/unregister", baseURL: base, token: token, body: Data("{}".utf8), as: Result.self)
     }
     func reset() {
+        testStatus = nil
         generation += 1; remoteRegistered = false; pendingRoomID = nil; pendingUserID = nil
         center.removeAllPendingNotificationRequests(); center.removeAllDeliveredNotifications()
         UIApplication.shared.unregisterForRemoteNotifications()
@@ -87,12 +90,40 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let request = UNNotificationRequest(identifier: "message-" + message.id, content: content, trigger: nil)
         center.add(request) { _ in }
     }
+
+    func sendTestAlert() async {
+        guard !isSendingTest else { return }
+        isSendingTest = true; testStatus = nil
+        defer { isSendingTest = false }
+        await configure()
+        let auth = AuthSessionManager.shared, attempt = generation
+        guard enabled else { testStatus = "Turn on message notifications first."; return }
+        guard auth.isAuthenticated, let user = auth.currentSession?.user.id else { return }
+        guard permission == .authorized || permission == .provisional else {
+            testStatus = "Allow notifications in iOS Settings, then try again."; return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "Loop"; content.body = "Your test notification is working."
+        content.userInfo = ["userId": user, "kind": "test"]
+        if sounds { content.sound = .default }
+        do {
+            try await center.add(UNNotificationRequest(identifier: "loop-test", content: content, trigger: nil))
+            guard generation == attempt, auth.currentSession?.user.id == user else {
+                center.removePendingNotificationRequests(withIdentifiers: ["loop-test"])
+                center.removeDeliveredNotifications(withIdentifiers: ["loop-test"])
+                return
+            }
+            testStatus = "Test alert sent. This checks local alerts; background push status is shown above."
+        } catch {
+            if generation == attempt { testStatus = "Could not send a test alert. Check iOS notification settings." }
+        }
+    }
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         let room = notification.request.content.userInfo["roomId"] as? String
         let user = notification.request.content.userInfo["userId"] as? String
         return await MainActor.run {
-            guard self.enabled, let user, user == AuthSessionManager.shared.currentSession?.user.id else { return [] }
-            if AppEnvironment.shared.chatStore.activeRoom?.id == room { return self.sounds ? [.sound] : [] }
+            guard self.enabled, AuthSessionManager.shared.isAuthenticated, let user, user == AuthSessionManager.shared.currentSession?.user.id else { return [] }
+            if let room, AppEnvironment.shared.chatStore.activeRoom?.id == room { return self.sounds ? [.sound] : [] }
             return self.sounds ? [.banner, .list, .sound] : [.banner, .list]
         }
     }

@@ -96,12 +96,12 @@ struct PostPhotos: View {
     }
     @ViewBuilder private func photo(_ media: CircleMedia, index: Int) -> some View {
         if let onPhotoTap {
-            CircleMediaView(media: media).contentShape(Rectangle())
+            CircleMediaView(media: media, cachesPost: true).contentShape(Rectangle())
                 .onTapGesture { onPhotoTap(index) }
                 .accessibilityAddTraits(.isButton)
                 .accessibilityLabel("Open photo \(index + 1) by \(post.author.name) full screen")
                 .accessibilityAction { onPhotoTap(index) }
-        } else { CircleMediaView(media: media) }
+        } else { CircleMediaView(media: media, cachesPost: true) }
     }
 }
 private struct EditPostView: View {
