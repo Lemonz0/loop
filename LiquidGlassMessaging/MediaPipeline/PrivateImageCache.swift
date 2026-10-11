@@ -33,20 +33,15 @@ final class PrivateImageCache {
         loadIDs[url] = loadID
         // A disappearing view cancels its waiter, not the download shared by other views.
         let task = Task { @MainActor in
-            print("Private image cache diagnostic: download started")
             let file = try await download(url)
-            print("Private image cache diagnostic: download finished")
             guard generation == attempt, loadIDs[url] == loadID, !Task.isCancelled else {
                 try? FileManager.default.removeItem(at: file)
                 throw CancellationError()
             }
             let decoded = await Task.detached(priority: .userInitiated) {
-                print("Private image cache diagnostic: decode started")
                 let image = UIImage(contentsOfFile: file.path)
-                print("Private image cache diagnostic: decode finished")
                 return image
             }.value
-            print("Private image cache diagnostic: decode returned to main actor")
             guard generation == attempt, loadIDs[url] == loadID, !Task.isCancelled else {
                 try? FileManager.default.removeItem(at: file)
                 throw CancellationError()
@@ -56,9 +51,7 @@ final class PrivateImageCache {
                 throw URLError(.cannotDecodeContentData)
             }
             files[url] = file
-            print("Private image cache diagnostic: store started")
             store(image, for: url)
-            print("Private image cache diagnostic: store finished")
             return image
         }
         pending[url] = task

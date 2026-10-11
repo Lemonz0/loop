@@ -104,7 +104,6 @@ jobs:
           xcodebuild test \
             -project LiquidGlass.xcodeproj \
             -scheme ThemeContrast \
-            -only-testing:ThemeContrastTests/PrivateImageCacheTests/testCategoryRecreationUsesCachedImageAndNewURLLoadsNewPhoto \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \

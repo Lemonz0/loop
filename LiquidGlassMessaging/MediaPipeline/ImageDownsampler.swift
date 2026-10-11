@@ -1,10 +1,6 @@
 import Foundation
 import ImageIO
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
 /// Hardware-accelerated image downsampler utilizing ImageIO/CoreGraphics thumbnailing
 /// and adaptive JPEG compression to guarantee payloads stay under 150 MB.
 public enum ImageDownsampler {
@@ -39,7 +35,6 @@ public enum ImageDownsampler {
             return sourceURL
         }
         
-        #if canImport(UIKit)
         return try await Task.detached(priority: .userInitiated) {
             guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
                 throw ImageDownsampleError.unableToCreateSource
@@ -56,16 +51,15 @@ public enum ImageDownsampler {
                 throw ImageDownsampleError.thumbnailGenerationFailed
             }
             
-            let uiImage = UIImage(cgImage: downsampledCGImage)
             var compression: CGFloat = 0.92
-            var compressedData: Data? = uiImage.jpegData(compressionQuality: compression)
+            var compressedData = try encodeJPEG(downsampledCGImage, quality: compression)
             
-            while let data = compressedData, Int64(data.count) > targetByteLimit, compression > 0.3 {
+            while Int64(compressedData.count) > targetByteLimit, compression > 0.3 {
                 compression -= 0.15
-                compressedData = uiImage.jpegData(compressionQuality: compression)
+                compressedData = try encodeJPEG(downsampledCGImage, quality: compression)
             }
             
-            guard let finalData = compressedData, Int64(finalData.count) <= targetByteLimit else {
+            guard Int64(compressedData.count) <= targetByteLimit else {
                 throw ImageDownsampleError.failedToWriteData
             }
             
@@ -73,11 +67,18 @@ public enum ImageDownsampler {
             let outputFileName = "compressed_\(UUID().uuidString).jpg"
             let destinationURL = tempDir.appendingPathComponent(outputFileName)
             
-            try finalData.write(to: destinationURL, options: .atomic)
+            try compressedData.write(to: destinationURL, options: .atomic)
             return destinationURL
         }.value
-        #else
-        return sourceURL
-        #endif
+    }
+
+    private static func encodeJPEG(_ image: CGImage, quality: CGFloat) throws -> Data {
+        guard let encoded = CFDataCreateMutable(kCFAllocatorDefault, 0),
+              let destination = CGImageDestinationCreateWithData(encoded, "public.jpeg" as CFString, 1, nil) else {
+            throw ImageDownsampleError.failedToWriteData
+        }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw ImageDownsampleError.failedToWriteData }
+        return encoded as Data
     }
 }
