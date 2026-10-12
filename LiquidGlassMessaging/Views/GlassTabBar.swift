@@ -60,6 +60,7 @@ struct GlassTabBar: View {
                         chatStore.emitTyping(isTyping: typing, in: room)
                     })
                     .environment(\.conversationDockHeight, metrics.height)
+                    .padding(.bottom, keyboardIsVisible ? 10 : 0)
                     .offset(y: keyboardIsVisible ? 0 : metrics.bottomOffset)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
             }
