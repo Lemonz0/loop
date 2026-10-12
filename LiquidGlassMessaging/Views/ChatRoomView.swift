@@ -71,14 +71,16 @@ public struct ChatRoomView: View {
                                 .id("typing_indicator")
                             }
 
-                            // Bottom spacer for floating input bar
+                            // The shared safe-area inset (or standalone VStack) reserves the dock's height.
                             Color.clear
-                                .frame(height: 70)
+                                .frame(height: 1)
                                 .id("bottom_anchor")
                         }
                         .padding(.vertical, 8)
                         .proMotionAdaptiveScroll(coordinateSpaceName: "chat_room_scroll_\(room.id)")
                     }
+                    .defaultScrollAnchor(.bottom)
+                    .scrollDismissesKeyboard(.immediately)
                     .contextMenu {
                         Button("Set loop wallpaper", systemImage: "photo") { isShowingWallpaperPicker = true }
                         Button("Reset wallpaper", systemImage: "arrow.counterclockwise", role: .destructive) { Task { await themeManager.resetRoomTheme(for: room.id, chatStore: chatStore) } }
@@ -95,6 +97,14 @@ public struct ChatRoomView: View {
                         }
                     }
                     .scrollEdgeEffectStyle(.soft, for: .top)
+                    #if os(iOS)
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                        // Scroll after the keyboard and dock have reduced the visible message area.
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                            proxy.scrollTo("bottom_anchor", anchor: .bottom)
+                        }
+                    }
+                    #endif
                     .onChange(of: chatStore.messagesByRoomId[room.id]?.count) { _, _ in
                         ProMotionEngine.shared.boostTo120(duration: 1.5)
                         withAnimation(GlassTheme.fluidSpring) {
