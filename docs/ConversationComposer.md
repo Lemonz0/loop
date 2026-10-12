@@ -4,6 +4,10 @@ The conversation input and post comment input now use `ComposerCapsule` and `Com
 
 The conversation attachment circle now matches that 50pt height. `ConversationDockMetrics` retains the existing bottom-screen margin and safe-area measurement while using the shared height rather than the old 60pt control height.
 
+The shared dock leaves a 10pt gap above the software keyboard. The attachment/cancel control is one stable button with an explicit circular hit area covering its entire 50pt label, including the space around its symbol. Opening the photo picker dismisses text focus and keeps the conversation dock mounted. Cancel stops recording and removes the draft without sending it.
+
+Voice playback loads use the attachment ID so delivery updates do not change the load identity. Offscreen task cancellation, including URLSession's cancelled error, is ignored rather than displayed in the message. Each new load clears any earlier error, and genuine failures expose a retry button.
+
 Voice recording keeps its controls in the input row rather than adding a separate platter above it. After microphone permission succeeds, the microphone uses Apple's SF Symbols Replace transition to become the send arrow. The field transitions to a waveform and elapsed time, and the attachment circle becomes a cancel control. Send finishes and uploads the recording. A failed upload retains the draft in the same row, with the send control acting as retry; cancel discards it. Photo/video processing status also occupies the field in this same compact row rather than adding a banner above it. Duplicate voice uploads are guarded synchronously, and in-flight uploads retain their file if the view disappears.
 
 Reduce Motion uses a short opacity transition instead of symbol replacement/scaling. Reduce Transparency and Increase Contrast use tinted native regular glass. No simulated glass or hand-drawn borders/shadows are used. First-use microphone permission prompts no longer cancel themselves when the app briefly becomes inactive; backgrounding and audio interruptions still cancel recording. A canceled permission request no longer reports permission denial.

@@ -95,28 +95,26 @@ public struct ChatInputDockView: View {
     }
 
     private var attachmentControl: some View {
-        Group {
+        Button {
             if hasVoice {
-                Button(role: .destructive) {
-                    voiceStartTask?.cancel(); recorder.cancel(); discardVoice(); HapticFeedback.soft()
-                } label: {
-                    Image(systemName: "xmark").font(.body.weight(.semibold)).foregroundStyle(theme.destructive)
-                        .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
-                }.accessibilityLabel(recorder.isRecording ? "Cancel voice recording" : "Discard voice message")
-                    .disabled(isSendingVoice)
+                voiceStartTask?.cancel(); recorder.cancel(); discardVoice(); HapticFeedback.soft()
             } else {
-                Button {
-                    // Keep the shared dock mounted while the system picker covers the chat.
-                    AppEnvironment.shared.chatStore.isPickingMedia = true
-                    isShowingMediaPicker = true
-                } label: {
-                    Image(systemName: "photo.on.rectangle.angled").font(.body.weight(.medium)).foregroundStyle(theme.accent)
-                        .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
-                }.accessibilityLabel("Attach a photo or video").disabled(uploadManager.isProcessing || recorder.requestingPermission)
+                // Keep the shared dock mounted while the system picker covers the chat.
+                textFocused = false
+                AppEnvironment.shared.chatStore.isPickingMedia = true
+                isShowingMediaPicker = true
             }
+        } label: {
+            Image(systemName: hasVoice ? "xmark" : "photo.on.rectangle.angled")
+                .font(.body.weight(hasVoice ? .semibold : .medium))
+                .foregroundStyle(hasVoice ? theme.destructive : theme.accent)
+                .frame(width: ComposerLayout.barHeight, height: ComposerLayout.barHeight)
+                .contentShape(Circle())
         }.buttonStyle(.plain)
             .glassEffect((reduceTransparency || contrast == .increased) ? .regular.tint(theme.backgroundBase) : .regular.interactive(), in: Circle())
             .glassEffectID("attachment", in: dockNamespace)
+            .accessibilityLabel(hasVoice ? (recorder.isRecording ? "Cancel voice recording" : "Discard voice message") : "Attach a photo or video")
+            .disabled(isSendingVoice || (!hasVoice && (uploadManager.isProcessing || recorder.requestingPermission)))
     }
     private var mediaStatus: String { uploadManager.processingStatus + (uploadManager.uploadProgress > 0 ? " · \(Int(uploadManager.uploadProgress * 100))%" : "") }
     private func voiceTime(_ duration: Double) -> String { let seconds = max(0, Int(duration)); return String(format: "%d:%02d", seconds / 60, seconds % 60) }

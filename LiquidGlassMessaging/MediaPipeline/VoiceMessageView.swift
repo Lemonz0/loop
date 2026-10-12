@@ -55,12 +55,13 @@ struct VoiceMessageView: View {
     @State private var seeking = false
     @State private var progress: Double = 0
     @State private var error: String?
+    @State private var loadAttempt = 0
     private var duration: Double { player?.duration ?? attachment.durationSeconds ?? 0 }
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button {
-                    guard let player else { return }
+                    guard let player else { error = nil; loadAttempt += 1; return }
                     if player.isPlaying { player.pause(); playing = false }
                     else {
                         do {
@@ -70,9 +71,9 @@ struct VoiceMessageView: View {
                             playing = player.play()
                         } catch { self.error = error.localizedDescription }
                     }
-                } label: { Image(systemName: playing ? "pause.fill" : "play.fill").frame(width: 44, height: 44) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle).disabled(player == nil)
-                    .accessibilityLabel(playing ? "Pause voice message" : "Play voice message")
+                } label: { Image(systemName: player == nil && error != nil ? "arrow.clockwise" : playing ? "pause.fill" : "play.fill").frame(width: 44, height: 44) }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).disabled(player == nil && error == nil)
+                    .accessibilityLabel(player == nil && error != nil ? "Retry loading voice message" : playing ? "Pause voice message" : "Play voice message")
                 if player == nil && error == nil { ProgressView() }
                 Slider(value: $progress, in: 0...max(duration, 0.01), onEditingChanged: { editing in seeking = editing; if !editing { player?.currentTime = progress } })
                     .disabled(player == nil).accessibilityLabel("Voice message playback position")
@@ -80,7 +81,8 @@ struct VoiceMessageView: View {
             }
             if let error { Text(error).font(.caption).foregroundStyle(theme.destructive) }
         }.frame(minWidth: 230, maxWidth: 280)
-            .task(id: attachment.remoteURL) {
+            .task(id: "\(attachment.id)-\(loadAttempt)") {
+                error = nil
                 do {
                     let file: URL
                     if let local = attachment.localURL, FileManager.default.fileExists(atPath: local.path) { file = local }
@@ -88,7 +90,11 @@ struct VoiceMessageView: View {
                     else { throw URLError(.fileDoesNotExist) }
                     try Task.checkCancellation()
                     player = try AVAudioPlayer(contentsOf: file); player?.prepareToPlay()
-                } catch is CancellationError {} catch { self.error = error.localizedDescription }
+                } catch {
+                    // SwiftUI cancels offscreen loads; URLSession reports those as URLError.cancelled.
+                    guard !Task.isCancelled, !AccountHTTPClient.isCancellation(error) else { return }
+                    self.error = error.localizedDescription
+                }
             }
             .task {
                 while !Task.isCancelled {
