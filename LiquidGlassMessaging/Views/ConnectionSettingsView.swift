@@ -71,7 +71,7 @@ public struct ConnectionSettingsView: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(theme.secondaryText)
 
-                                    TextField("http://192.168.1.132:8080", text: $serverAddressInput)
+                                    TextField(AppEnvironment.defaultServerAddress, text: $serverAddressInput)
                                         .font(.system(size: 15, design: .monospaced))
                                         .foregroundStyle(.primary)
                                         .textInputAutocapitalization(.never)

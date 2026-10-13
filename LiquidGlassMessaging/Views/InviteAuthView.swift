@@ -37,7 +37,7 @@ public struct InviteAuthView: View {
                                 SecureField("Invite code", text: $invite).autocorrectionDisabled().padding().circleSurface(radius: 20)
                             }
                             DisclosureGroup("Server connection") {
-                                TextField("http://192.168.1.132:8080", text: $serverAddress)
+                                TextField(AppEnvironment.defaultServerAddress, text: $serverAddress)
                                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                                     .padding(.vertical, 12)
                                 Text("For PC testing, use the same Wi-Fi and allow Local Network access. A hosted server must use HTTPS.")

@@ -7,10 +7,11 @@ public final class AppEnvironment {
     public static let shared = AppEnvironment()
     
     private static let serverAddressKey = "settings_server_address"
+    public static let defaultServerAddress = "https://loop.34.89.181.18.nip.io"
     
     public var serverAddress: String {
         get {
-            UserDefaults.standard.string(forKey: Self.serverAddressKey) ?? "http://192.168.1.132:8080"
+            UserDefaults.standard.string(forKey: Self.serverAddressKey) ?? Self.defaultServerAddress
         }
         set {
             let cleaned = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -23,7 +24,7 @@ public final class AppEnvironment {
         if !cleaned.isEmpty, let url = URL(string: cleaned) {
             return url
         }
-        return URL(string: "http://192.168.1.132:8080")!
+        return URL(string: Self.defaultServerAddress)!
     }
     
     public var serverWSURL: URL {
@@ -39,7 +40,7 @@ public final class AppEnvironment {
         if wsString.hasSuffix("/") {
             wsString = String(wsString.dropLast())
         }
-        return URL(string: wsString + "/ws") ?? URL(string: "ws://192.168.1.132:8080/ws")!
+        return URL(string: wsString + "/ws") ?? URL(string: Self.defaultServerAddress.replacingOccurrences(of: "https://", with: "wss://") + "/ws")!
     }
     
     public let chatStore = ChatStore()
@@ -47,7 +48,14 @@ public final class AppEnvironment {
     public let mediaUploadManager = MediaUploadManager.shared
     public let callManager = WebRTCManager.shared
     
-    private init() {}
+    private init() {
+        // Move the former PC default to the hosted server, preserving custom endpoints.
+        let stored = UserDefaults.standard.string(forKey: Self.serverAddressKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if stored == "http://192.168.1.132:8080" || stored == "http://192.168.1.132:8080/" {
+            UserDefaults.standard.set(Self.defaultServerAddress, forKey: Self.serverAddressKey)
+        }
+    }
     
     /// Establishes connection when session is active.
     public func activateSessionIfAvailable() {
