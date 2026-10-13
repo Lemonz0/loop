@@ -1,0 +1,9 @@
+# Only source and package descriptors belong in an image build context.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!Dockerfile
+!.dockerignore

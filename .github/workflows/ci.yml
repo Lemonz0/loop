@@ -49,6 +49,9 @@ jobs:
           # Same Docker Official Image, available when Docker Hub is unreachable.
           docker build --build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:22-alpine -t liquid-glass-server:test ./Server
 
+      - name: Verify container networking and durable storage
+        run: node scripts/check-server-container.cjs
+
   # =========================================================================
   # 2. iOS Native Client CI & IPA Packaging (Apple Silicon macOS Runner)
   # =========================================================================

@@ -1,0 +1,3 @@
+{$LOOP_HOST} {
+    reverse_proxy loop-server:8080
+}

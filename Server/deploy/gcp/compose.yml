@@ -1,0 +1,36 @@
+services:
+  loop-server:
+    build:
+      context: ./source/Server
+    restart: unless-stopped
+    env_file: /srv/loop/.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+    volumes:
+      - /srv/loop/data:/app/data
+      - /srv/loop/uploads:/app/uploads
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: /srv/loop/hosting.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/loop/caddy-data:/data
+      - /srv/loop/caddy-config:/config
+    depends_on:
+      loop-server:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
