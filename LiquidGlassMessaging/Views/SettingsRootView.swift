@@ -82,7 +82,7 @@ public struct SettingsRootView: View {
                                     } label: {
                                         categoryCardContent(
                                             title: "Connection",
-                                            subtitle: "Hub relay address and latency",
+                                            subtitle: "Connection status and reconnect",
                                             icon: "network",
                                             iconColor: theme.accent
                                         )
