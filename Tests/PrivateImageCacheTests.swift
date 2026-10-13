@@ -21,6 +21,8 @@ final class PrivateImageCacheTests: XCTestCase {
         defer { cache.reset() }
         let url = URL(string: "https://example.com/uploads/avatar.png")!
         let first = try await cache.image(for: url)
+        XCTAssertEqual(first.cgImage?.width, 1)
+        XCTAssertEqual(first.cgImage?.height, 1)
         XCTAssertTrue(cache.cachedImage(for: url) === first)
         let revisited = try await cache.image(for: url)
         XCTAssertTrue(revisited === first)
@@ -108,6 +110,19 @@ final class PrivateImageCacheTests: XCTestCase {
         finish?.resume(returning: file)
         do { _ = try await waiter.value; XCTFail("Revoked image cached") }
         catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertNil(cache.cachedImage(for: url))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testInvalidDownloadIsRejectedAndPrivateFileIsRemoved() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".dat")
+        try Data("not an image".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let cache = PrivateImageCache { _ in file }
+        defer { cache.reset() }
+        let url = URL(string: "https://example.com/uploads/invalid.png")!
+        do { _ = try await cache.image(for: url); XCTFail("Invalid image accepted") }
+        catch { XCTAssertEqual((error as? URLError)?.code, .cannotDecodeContentData) }
         XCTAssertNil(cache.cachedImage(for: url))
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
     }

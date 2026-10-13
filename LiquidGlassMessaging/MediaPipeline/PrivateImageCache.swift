@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 /// Session-only image cache shared by views, with separate avatar and post instances.
@@ -20,7 +21,8 @@ final class PrivateImageCache {
 
     func cachedImage(for url: URL) -> UIImage? {
         if let image = images.object(forKey: url as NSURL) { return image }
-        guard let file = files[url], let image = UIImage(contentsOfFile: file.path) else { return nil }
+        guard let file = files[url], let decoded = Self.decodeImage(at: file) else { return nil }
+        let image = UIImage(cgImage: decoded)
         store(image, for: url)
         return image
     }
@@ -39,17 +41,18 @@ final class PrivateImageCache {
                 throw CancellationError()
             }
             let decoded = await Task.detached(priority: .userInitiated) {
-                let image = UIImage(contentsOfFile: file.path)
-                return image
+                Self.decodeImage(at: file)
             }.value
             guard generation == attempt, loadIDs[url] == loadID, !Task.isCancelled else {
                 try? FileManager.default.removeItem(at: file)
                 throw CancellationError()
             }
-            guard let image = decoded else {
+            guard let decoded else {
                 try? FileManager.default.removeItem(at: file)
                 throw URLError(.cannotDecodeContentData)
             }
+            // Construct UIKit objects on the main actor after ImageIO finishes decoding.
+            let image = UIImage(cgImage: decoded)
             files[url] = file
             store(image, for: url)
             return image
@@ -82,5 +85,20 @@ final class PrivateImageCache {
     private func store(_ image: UIImage, for url: URL) {
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
         images.setObject(image, forKey: url as NSURL, cost: cost)
+    }
+
+    private nonisolated static func decodeImage(at file: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else { return nil }
+        // Decode at the original resolution and apply EXIF orientation without UIKit.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width.intValue, height.intValue)
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }
