@@ -24,6 +24,7 @@ async function main() {
         } catch {}
         await pause();
       }
+      console.error(docker('logs', '--tail', '40', name));
       throw new Error('Container did not become reachable through its published port');
     }
     await ready();
