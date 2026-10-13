@@ -221,7 +221,7 @@ public final class ChatStore {
             presenceByUserId = [:]
             Task {
                 let auth = AuthSessionManager.shared
-                if let url = auth.savedServerURL { _ = await auth.validateSavedSession(serverURL: url); configure(circles: auth.circles) }
+                if auth.savedServerURL != nil { _ = await auth.validateSavedSession(); configure(circles: auth.circles) }
                 await refreshRooms(); await refreshProfiles(); accountRevision += 1
             }
         case .callSignal:

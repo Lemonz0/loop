@@ -42,7 +42,8 @@ to Google's IAP range, rather than opening SSH to the internet.
 7. Verify HTTPS `/health`, rejection of unauthenticated API and WebSocket
    requests, existing-account login, authenticated chat/media, and persistence
    across a container restart. Restore a backup before relying on it.
-8. Update the iOS server address to the verified HTTPS URL. Saved sessions are
+8. Set AppEnvironment's fixed server URL to the verified HTTPS URL and build
+   the iOS app. Users cannot select a different server. Saved sessions are
    server-bound, so users may need to sign in again. Test two-device messaging
    and calls over separate networks. Calling across restrictive networks still
    needs a configured TURN relay; APNs/Spotify require their own valid setup.

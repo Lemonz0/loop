@@ -10,7 +10,6 @@ public struct InviteAuthView: View {
     @State private var password = ""
     @State private var displayName = ""
     @State private var invite = ""
-    @State private var serverAddress = AppEnvironment.shared.serverAddress
     @State private var localError: String?
     public init(initialSignup: Bool = false, onSuccess: @escaping () -> Void) { self.onSuccess = onSuccess; _signingUp = State(initialValue: initialSignup) }
     public var body: some View {
@@ -36,13 +35,6 @@ public struct InviteAuthView: View {
                                 TextField("Display name", text: $displayName).textContentType(.name).padding().circleSurface(radius: 20)
                                 SecureField("Invite code", text: $invite).autocorrectionDisabled().padding().circleSurface(radius: 20)
                             }
-                            DisclosureGroup("Server connection") {
-                                TextField(AppEnvironment.defaultServerAddress, text: $serverAddress)
-                                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                                    .padding(.vertical, 12)
-                                Text("For PC testing, use the same Wi-Fi and allow Local Network access. A hosted server must use HTTPS.")
-                                    .font(.footnote).foregroundStyle(theme.secondaryText)
-                            }.padding().circleSurface(radius: 20)
                             if let error = localError ?? authManager.lastError {
                                 Text(error).font(.footnote).foregroundStyle(theme.destructive)
                             }
@@ -53,7 +45,7 @@ public struct InviteAuthView: View {
                             if authManager.currentSession != nil && !authManager.isAuthenticated {
                                 Button("Retry saved session") {
                                     Task {
-                                        if let url = AccountCodec.serverURL(serverAddress), await authManager.validateSavedSession(serverURL: url) { onSuccess() }
+                                        if await authManager.validateSavedSession() { onSuccess() }
                                     }
                                 }.buttonStyle(.glass).disabled(authManager.isAuthenticating)
                             }
@@ -66,7 +58,6 @@ public struct InviteAuthView: View {
     }
     private func submit() {
         localError = nil
-        guard let url = AccountCodec.serverURL(serverAddress) else { localError = "Enter an HTTPS server URL or a local network HTTP address."; return }
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if signingUp {
             guard name.range(of: "^[a-z0-9_]{3,32}$", options: .regularExpression) != nil else { localError = "Username: 3–32 letters, numbers, or underscores."; return }
@@ -74,10 +65,9 @@ public struct InviteAuthView: View {
                 localError = "Enter a display name, invite, and password of 12–128 characters without surrounding spaces."; return
             }
         }
-        AppEnvironment.shared.serverAddress = url.absoluteString
         Task {
             if await authManager.signIn(username: name, password: password, invite: signingUp ? invite.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
-                                        displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines), serverURL: url) {
+                                        displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 password = ""; invite = ""; HapticFeedback.success(); onSuccess()
             } else { HapticFeedback.error() }
         }

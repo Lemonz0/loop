@@ -27,7 +27,7 @@ public struct LiquidGlassMessagingAppView: View {
             .environment(\.colorScheme, AppTheme(preset: themeManager.activePreset).colorScheme)
             .preferredColorScheme(AppTheme(preset: themeManager.activePreset).colorScheme)
             .tint(AppTheme(preset: themeManager.activePreset).accent)
-            .task { await authManager.validateSavedSession(serverURL: environment.serverBaseURL) }
+            .task { await authManager.validateSavedSession() }
             .task(id: authManager.isAuthenticated) {
                 if authManager.isAuthenticated { environment.activateSessionIfAvailable(); await NotificationManager.shared.configure() }
                 else { environment.chatStore.reset() }

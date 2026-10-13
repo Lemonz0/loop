@@ -16,11 +16,12 @@ public final class AuthSessionManager {
     private var generation = 0
     private var privateMediaFiles: Set<URL> = []
     public init() {
-        if let stored = loadStoredSession(), AccountCodec.valid(stored) {
+        if let stored = loadStoredSession(), AccountCodec.valid(stored), stored.serverURL == AppEnvironment.serverURL {
             currentSession = stored.session; savedServerURL = stored.serverURL; isValidating = true
         } else { clearStoredSession() }
     }
-    public func signIn(username: String, password: String, invite: String? = nil, displayName: String = "", serverURL: URL) async -> Bool {
+    public func signIn(username: String, password: String, invite: String? = nil, displayName: String = "") async -> Bool {
+        let serverURL = AppEnvironment.serverURL
         guard !isAuthenticating else { return false }
         isAuthenticating = true; lastError = nil
         defer { isAuthenticating = false }
@@ -41,10 +42,11 @@ public final class AuthSessionManager {
             guard AccountCodec.valid(stored) else { throw AccountHTTPError(status: 401, message: "The server returned an invalid session.") }
             try saveSession(stored)
             currentSession = session; savedServerURL = serverURL
-            return await validateSavedSession(serverURL: serverURL)
+            return await validateSavedSession()
         } catch { if generation == attempt { lastError = error.localizedDescription }; return false }
     }
-    @discardableResult public func validateSavedSession(serverURL: URL) async -> Bool {
+    @discardableResult public func validateSavedSession() async -> Bool {
+        let serverURL = AppEnvironment.serverURL
         guard let session = currentSession, savedServerURL == serverURL else {
             isValidating = false; isAuthenticated = false; return false
         }
@@ -85,7 +87,7 @@ public final class AuthSessionManager {
         do {
             _ = try await AccountHTTPClient.shared.request("api/invites/join", baseURL: url, token: session.token,
                 body: JSONEncoder().encode(Body(secretKey: code)), as: Response.self)
-            return await validateSavedSession(serverURL: url)
+            return await validateSavedSession()
         } catch { lastError = error.localizedDescription; return false }
     }
     public func renameCircle(id: String, name: String) async {
@@ -95,7 +97,7 @@ public final class AuthSessionManager {
         do {
             _ = try await AccountHTTPClient.shared.request("api/circles/\(id)/rename", baseURL: url, token: session.token,
                 body: JSONEncoder().encode(Body(name: name)), as: Response.self)
-            _ = await validateSavedSession(serverURL: url)
+            _ = await validateSavedSession()
             AppEnvironment.shared.chatStore.configure(circles: circles)
         } catch { lastError = error.localizedDescription }
     }

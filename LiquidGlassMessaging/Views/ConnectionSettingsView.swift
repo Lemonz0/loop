@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Focused sub-page for network endpoint configuration and real-time connection status using Liquid Glass.
+/// Connection status and recovery using Liquid Glass.
 @MainActor
 public struct ConnectionSettingsView: View {
     @Environment(\.appTheme) private var theme
     @State private var chatStore = AppEnvironment.shared.chatStore
-    @State private var serverAddressInput: String = ""
     @State private var isReconnecting: Bool = false
     @State private var logger = AppLogger.shared
 
@@ -56,32 +55,15 @@ public struct ConnectionSettingsView: View {
                         }
                     }
 
-                    // Relay Endpoint Section
+                    // Connection recovery
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("RELAY ENDPOINT")
+                        Text("RECONNECT")
                             .font(.system(size: 12, weight: .bold, design: .rounded))
                             .foregroundStyle(theme.secondaryText)
                             .padding(.leading, 6)
 
                         GlassEffectContainer(spacing: 14) {
                             VStack(spacing: 14) {
-                                // URL Input Card
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Hub Server URL")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(theme.secondaryText)
-
-                                    TextField(AppEnvironment.defaultServerAddress, text: $serverAddressInput)
-                                        .font(.system(size: 15, design: .monospaced))
-                                        .foregroundStyle(.primary)
-                                        .textInputAutocapitalization(.never)
-                                        .autocorrectionDisabled()
-                                        .padding(.vertical, 4)
-                                }
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 16)
-                                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-
                                 // Reconnect Button
                                 Button {
                                     reconnect()
@@ -93,7 +75,7 @@ public struct ConnectionSettingsView: View {
                                         } else {
                                             Image(systemName: "arrow.triangle.2.circlepath")
                                         }
-                                        Text("Reconnect to Hub")
+                                        Text("Reconnect")
                                             .font(.system(size: 16, weight: .semibold))
                                         Spacer()
                                     }
@@ -112,7 +94,7 @@ public struct ConnectionSettingsView: View {
                         Image(systemName: "network.badge.shield.half.filled")
                             .font(.system(size: 15))
                             .foregroundStyle(theme.secondaryText)
-                        Text("Configures the primary WebSocket relay node for end-to-end messaging and WebRTC signaling.")
+                        Text("Reconnect if your messages aren’t updating.")
                             .font(.system(size: 12))
                             .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -129,9 +111,6 @@ public struct ConnectionSettingsView: View {
         }
         .navigationTitle("Connection")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            self.serverAddressInput = AppEnvironment.shared.serverAddress
-        }
     }
 
     private var connectionColor: Color {
@@ -152,14 +131,11 @@ public struct ConnectionSettingsView: View {
     }
 
     private func reconnect() {
-        let trimmed = serverAddressInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
         isReconnecting = true
         HapticFeedback.soft()
 
-        AppEnvironment.shared.serverAddress = trimmed
         AppEnvironment.shared.reconnectServer()
-        logger.info(.network, "Reconnecting to hub server at: \(trimmed)")
+        logger.info(.network, "Reconnecting to Loop")
 
         Task {
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -170,9 +146,9 @@ public struct ConnectionSettingsView: View {
 
 // MARK: - Preview
 
-#Preview {
-    NavigationStack {
-        ConnectionSettingsView()
-    }
-
+#Preview("Connection · dark") {
+    NavigationStack { ConnectionSettingsView() }.circlePreviewTheme(.aurora)
+}
+#Preview("Connection · light") {
+    NavigationStack { ConnectionSettingsView() }.circlePreviewTheme(.daylight)
 }

@@ -309,7 +309,7 @@ public struct MessagesView: View {
         .onAppear { openProfileDestination() }
         .sheet(isPresented: $showContacts) { ProfileDirectoryView(room: nil) }
         .sheet(isPresented: $showCallHistory) { LoopCallHistoryView() }
-        .refreshable { _ = await auth.validateSavedSession(serverURL: AppEnvironment.shared.serverBaseURL) }
+        .refreshable { _ = await auth.validateSavedSession() }
         .alert("Edit loop name", isPresented: $showRename) {
             TextField("Loop name", text: $loopName)
             Button("Save") { if let circle = renameCircle { Task { await auth.renameCircle(id: circle.id, name: loopName) } } }
