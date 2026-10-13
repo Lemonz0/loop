@@ -15,7 +15,7 @@ async function main() {
       '-e', 'INVITE_KEY=' + bootstrap,
       '-v', volumes[0] + ':/app/data', '-v', volumes[1] + ':/app/uploads',
       'liquid-glass-server:test');
-    const base = 'http://' + docker('port', name, '8080/tcp');
+    let base = 'http://' + docker('port', name, '8080/tcp');
     async function ready() {
       for (let attempt = 0; attempt < 60; attempt++) {
         try {
@@ -39,6 +39,8 @@ async function main() {
     // Verify the second persistent mount independently of the account store.
     docker('exec', name, 'node', '-e', "require('node:fs').writeFileSync('/app/uploads/persistence-check.txt', 'persistent media')");
     docker('restart', name);
+    // Docker may assign a new host port when restarting an auto-published port.
+    base = 'http://' + docker('port', name, '8080/tcp');
     await ready();
     const me = await fetch(base + '/api/auth/me', { headers });
     assert.equal(me.status, 200);
